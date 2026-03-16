@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Custom Edge Startpage",
   "version": "1.0",
+  "permissions": ["tabs"],
   "chrome_url_overrides": {
     "newtab": "index.html"
   }

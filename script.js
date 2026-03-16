@@ -342,7 +342,16 @@ function renderTiles() {
             }
             
             el.addEventListener('click', (e) => {
-                if (el.classList.contains('dragging')) e.preventDefault();
+                if (el.classList.contains('dragging')) {
+                    e.preventDefault();
+                    return;
+                }
+                if (!/^https?:\/\//i.test(item.url)) {
+                    e.preventDefault();
+                    if (typeof chrome !== 'undefined' && chrome.tabs) {
+                        chrome.tabs.update({ url: item.url });
+                    }
+                }
             });
             
             el.addEventListener('contextmenu', (e) => {
