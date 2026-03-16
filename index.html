@@ -6,75 +6,101 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="background-overlay"></div>
-    
-    <div class="controls">
-        <button id="settings-btn">Настройки</button>
-        <button id="upload-bg-btn">Свой фон</button>
-        <input type="file" id="bg-upload" accept="image/*" class="hidden">
+
+    <!-- Desktop -->
+    <div id="desktop">
+        <div id="desktop-icons"></div>
     </div>
 
-    <div class="content">
-        <div class="clock-container" id="clock-container">
-            <div id="time">00:00</div>
-            <div id="date">дата</div>
-        </div>
-        
-        <form id="search-form">
-            <input type="text" id="search-input" placeholder="Введите запрос или адрес" autocomplete="off">
-        </form>
-
-        <div id="grid-container" class="grid-container"></div>
-    </div>
-
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <label class="checkbox-label" id="folder-checkbox-wrapper">
-                <input type="checkbox" id="is-folder-checkbox">
-                Это папка
-            </label>
-            <input type="text" id="tile-name" placeholder="Название (например, Игры)">
-            
-            <div id="url-container" class="url-container">
-                <input type="text" id="tile-url" placeholder="Ссылка (https://...)">
-                <input type="text" id="tile-icon" placeholder="Ссылка на иконку (оставь пустым для авто)">
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <button id="start-btn">
+            <span class="start-logo"><svg class="start-flag" width="15" height="15" viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="6" height="6" fill="#f35325"/><rect x="9" y="0" width="6" height="6" fill="#81bc06"/><rect x="0" y="9" width="6" height="6" fill="#05a6f0"/><rect x="9" y="9" width="6" height="6" fill="#ffba08"/></svg></span>
+            <span class="start-label">Пуск</span>
+        </button>
+        <div id="taskbar-sep"></div>
+        <div id="taskbar-windows"></div>
+        <div id="systray">
+            <div id="tray-clock">
+                <div id="tray-time">00:00</div>
+                <div id="tray-date">дата</div>
             </div>
-            
-            <button id="save-tile-btn">Сохранить</button>
-            <button id="close-modal-btn">Отмена</button>
         </div>
     </div>
 
-    <div id="settings-modal" class="modal hidden">
-        <div class="modal-content">
-            <label>Колонок в ряду <input type="number" id="grid-cols-input" min="2" max="12" value="4"></label>
-            <label>Ширина плиток <input type="range" id="tile-width-input" min="50" max="300" value="120"></label>
-            <label>Высота плиток <input type="range" id="tile-height-input" min="50" max="300" value="100"></label>
-            <label>Прозрачность <input type="range" id="tile-opacity-input" min="0" max="1" step="0.05" value="0.9"></label>
-            <label class="checkbox-label" style="margin-top: 5px;">
-                <input type="checkbox" id="tile-blur-input">
-                Эффект стекла (размытие фона)
-            </label>
-            
-            <div class="modal-actions-row">
-                <button id="export-btn">Экспорт</button>
-                <button id="import-btn">Импорт</button>
-                <input type="file" id="import-upload" accept=".json" class="hidden">
+    <!-- Start Menu -->
+    <div id="start-menu" class="hidden">
+        <div class="sm-header">
+            <div class="sm-avatar">&#128100;</div>
+            <div class="sm-username">User</div>
+        </div>
+        <div class="sm-body">
+            <div id="sm-all-programs" class="hidden">
+                <div class="sm-back-btn">
+                    <span class="sm-icon">&#9664;</span>Назад
+                </div>
+                <div id="sm-programs-list"></div>
             </div>
-
-            <button id="close-settings-btn">Закрыть</button>
+            <div class="sm-left">
+                <div class="sm-item" data-action="search">
+                    <span class="sm-icon">&#128269;</span>Поиск в интернете
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="notepad">
+                    <span class="sm-icon">&#128221;</span>Блокнот
+                </div>
+                <div class="sm-item" data-action="calculator">
+                    <span class="sm-icon">&#128290;</span>Калькулятор
+                </div>
+                <div class="sm-item" data-action="minesweeper">
+                    <span class="sm-icon">&#128163;</span>Сапёр
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="settings">
+                    <span class="sm-icon">&#9881;</span>Настройки
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item sm-allprograms-btn" data-action="allprograms">
+                    <span class="sm-icon">&#128196;</span>Все программы
+                    <span class="sm-allprograms-arrow">&#9658;</span>
+                </div>
+            </div>
+            <div class="sm-right">
+                <div class="sm-item" data-action="mycomputer">
+                    <span class="sm-icon">&#128421;</span>Мой компьютер
+                </div>
+                <div class="sm-item" data-action="recycle">
+                    <span class="sm-icon">&#128465;</span>Корзина
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="setbg">
+                    <span class="sm-icon">&#128444;</span>Свой фон
+                </div>
+                <div class="sm-item" data-action="removebg">
+                    <span class="sm-icon">&#10060;</span>Сбросить фон
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="export">
+                    <span class="sm-icon">&#128190;</span>Экспорт данных
+                </div>
+                <div class="sm-item" data-action="import">
+                    <span class="sm-icon">&#128193;</span>Импорт данных
+                </div>
+            </div>
+        </div>
+        <div class="sm-footer">
+            <button class="sm-shutdown-btn" data-action="shutdown">
+                <span class="sm-shutdown-icon">&#9211;</span> Завершение работы
+            </button>
         </div>
     </div>
 
-    <div id="context-menu" class="context-menu hidden">
-        <div class="menu-item link-only" id="menu-new-tab">Открыть в новой вкладке</div>
-        <div class="menu-item link-only" id="menu-new-window">Открыть в новом окне</div>
-        <div class="menu-item link-only" id="menu-incognito">Открыть в режиме инкогнито</div>
-        <div class="menu-separator link-only"></div>
-        <div class="menu-item" id="menu-move-root" style="display: none;">На главный экран</div>
-        <div class="menu-item" id="menu-edit">Изменить</div>
-        <div class="menu-item menu-danger" id="menu-delete">Удалить</div>
-    </div>
+    <!-- Context Menu -->
+    <div id="context-menu" class="xp-context-menu hidden"></div>
+
+    <!-- Hidden inputs -->
+    <input type="file" id="bg-upload" accept="image/*" class="hidden">
+    <input type="file" id="import-upload" accept=".json" class="hidden">
 
     <script src="script.js"></script>
 </body>
