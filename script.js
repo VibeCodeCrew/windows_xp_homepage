@@ -488,7 +488,7 @@ document.getElementById('save-tile-btn').addEventListener('click', () => {
         newItem = { isFolder: true, name, items: [] };
     } else {
         if (!url) return;
-        if (!url.startsWith('http')) url = 'https://' + url;
+        if (!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url)) url = 'https://' + url;
         newItem = { name, url };
         if (customIcon) newItem.customIcon = customIcon;
     }
