@@ -137,6 +137,7 @@ document.getElementById('import-upload').addEventListener('change', (e) => {
         }
     };
     reader.readAsText(file);
+    e.target.value = '';
 });
 
 let links = JSON.parse(localStorage.getItem('edge_tiles')) || [
@@ -205,7 +206,10 @@ function renderTiles() {
                 a.href = child.url;
                 a.className = 'mini-link';
                 
-                a.addEventListener('dragstart', (e) => e.preventDefault());
+                a.addEventListener('dragstart', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
                 
                 try {
                     const domain = new URL(child.url).hostname;
@@ -267,10 +271,12 @@ function renderTiles() {
                     document.removeEventListener('mousemove', mouseMoveHandler);
                     document.removeEventListener('mouseup', mouseUpHandler);
                     folderEl.draggable = true;
-                    
-                    item.colSpan = newColSpan;
-                    item.rowSpan = newRowSpan;
-                    saveAndRender();
+
+                    if (newColSpan !== startColSpan || newRowSpan !== startRowSpan) {
+                        item.colSpan = newColSpan;
+                        item.rowSpan = newRowSpan;
+                        saveAndRender();
+                    }
                 };
                 
                 document.addEventListener('mousemove', mouseMoveHandler);
@@ -293,7 +299,11 @@ function renderTiles() {
             });
             
             folderEl.addEventListener('dragend', () => folderEl.classList.remove('dragging'));
-            folderEl.addEventListener('dragover', (e) => { e.preventDefault(); folderEl.classList.add('drag-over'); });
+            folderEl.addEventListener('dragover', (e) => {
+                if (targetChildIndex !== null) return;
+                e.preventDefault();
+                folderEl.classList.add('drag-over');
+            });
             folderEl.addEventListener('dragleave', () => folderEl.classList.remove('drag-over'));
             
             folderEl.addEventListener('drop', (e) => {
@@ -399,12 +409,20 @@ document.getElementById('menu-new-tab').addEventListener('click', () => {
 });
 
 document.getElementById('menu-new-window').addEventListener('click', () => {
-    chrome.windows.create({ url: getTargetUrl() });
+    if (typeof chrome !== 'undefined' && chrome.windows) {
+        chrome.windows.create({ url: getTargetUrl() });
+    } else {
+        window.open(getTargetUrl(), '_blank');
+    }
     contextMenu.classList.add('hidden');
 });
 
 document.getElementById('menu-incognito').addEventListener('click', () => {
-    chrome.windows.create({ url: getTargetUrl(), incognito: true });
+    if (typeof chrome !== 'undefined' && chrome.windows) {
+        chrome.windows.create({ url: getTargetUrl(), incognito: true });
+    } else {
+        window.open(getTargetUrl(), '_blank');
+    }
     contextMenu.classList.add('hidden');
 });
 
