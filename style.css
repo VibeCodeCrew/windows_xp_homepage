@@ -82,6 +82,7 @@ body {
 
 .xp-tile-window:hover {
     box-shadow: 3px 3px 14px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.12);
+    outline: 2px solid rgba(49, 106, 197, 0.7);
 }
 
 /* Tile titlebar */
@@ -171,7 +172,11 @@ body {
     cursor: pointer;
 }
 
-.xp-icon:hover, .xp-icon.selected {
+.xp-icon:hover {
+    background: rgba(49, 106, 197, 0.38);
+    outline: 1px solid rgba(120, 170, 255, 0.85);
+}
+.xp-icon.selected {
     background: rgba(49, 106, 197, 0.38);
     outline: 1px dotted rgba(160, 190, 255, 0.7);
 }

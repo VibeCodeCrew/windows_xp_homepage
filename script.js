@@ -131,6 +131,42 @@ function autoArrange() {
     saveAndRender();
 }
 
+// ==================== ANTI-OVERLAP: find nearest free position ====================
+// Returns {x, y} at or near (x, y) that doesn't overlap any desktop icon.
+// excludeEls: Set of DOM elements to ignore (the ones being placed).
+function findFreePosition(x, y, w, h, excludeEls) {
+    var container = document.getElementById('desktop');
+    if (!container) return { x: x, y: y };
+    var dw = container.offsetWidth, dh = container.offsetHeight;
+    var pad = 4;
+    var occupied = [];
+    document.querySelectorAll('.desktop-icon').forEach(function(el) {
+        if (excludeEls && excludeEls.has(el)) return;
+        var l = parseFloat(el.style.left) || 0;
+        var t = parseFloat(el.style.top)  || 0;
+        occupied.push({ l: l - pad, t: t - pad, r: l + el.offsetWidth + pad, b: t + el.offsetHeight + pad });
+    });
+    function collides(cx, cy) {
+        return occupied.some(function(r) { return cx < r.r && cx + w > r.l && cy < r.b && cy + h > r.t; });
+    }
+    if (!collides(x, y)) return { x: x, y: y };
+    var step = Math.max(SNAP, 10);
+    for (var dist = step; dist < Math.max(dw, dh) * 2; dist += step) {
+        for (var ox = -dist; ox <= dist; ox += step) {
+            for (var oy = -dist; oy <= dist; oy += step) {
+                if (Math.abs(ox) < dist && Math.abs(oy) < dist) continue;
+                var nx = Math.max(0, Math.min(x + ox, dw - w));
+                var ny = Math.max(0, Math.min(y + oy, dh - h));
+                if (!collides(nx, ny)) {
+                    if (settings.snapToGrid) { nx = Math.round(nx / SNAP) * SNAP; ny = Math.round(ny / SNAP) * SNAP; }
+                    return { x: nx, y: ny };
+                }
+            }
+        }
+    }
+    return { x: x, y: y };
+}
+
 // ==================== DRAG (mouse-based free positioning) ====================
 let dragData = null;
 
@@ -155,7 +191,7 @@ function initIconDrag(icon, item, index) {
                 const idx = parseInt(el.dataset.index);
                 if (selectedIndices.has(idx) && links[idx]) {
                     items.push({
-                        icon: el, item: links[idx],
+                        icon: el, item: links[idx], index: idx,
                         iconX: parseFloat(el.style.left) || 0,
                         iconY: parseFloat(el.style.top)  || 0,
                     });
@@ -238,29 +274,54 @@ document.addEventListener('mouseup', function(e) {
     if (dd.multi) {
         dd.items.forEach(function(d) { d.icon.classList.remove('dragging'); d.icon.style.zIndex = ''; });
 
-        // Check if dropped on a folder
         const selectedIds = new Set(dd.items.map(function(d) { return parseInt(d.icon.dataset.index); }));
         let intoFolder = false;
+
+        // Helper: move all non-folder selected items into folder at fIdx
+        function dropMultiIntoFolder(fIdx) {
+            const toMove = dd.items.filter(function(d) { return !d.item.isFolder; })
+                .sort(function(a, b) { return b.index - a.index; });
+            let adjFIdx = fIdx;
+            toMove.forEach(function(d) {
+                if (d.index < adjFIdx) adjFIdx--;
+                const moved = links.splice(d.index, 1)[0];
+                if (moved) links[adjFIdx].items.push(moved);
+            });
+            // Refresh open folder window content (folder object reference is stable)
+            const wEntry = wmWindows['folder-' + fIdx];
+            if (wEntry && wEntry.el && wEntry.el._renderFolderContent) wEntry.el._renderFolderContent();
+            intoFolder = true;
+            selectedIndices.clear();
+            saveAndRender();
+        }
+
+        // Check folder icons
         document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
             fi.classList.remove('drag-over');
+            if (intoFolder) return;
             const fIdx = parseInt(fi.dataset.index);
-            if (selectedIds.has(fIdx)) return; // can't drop folder into itself
+            if (selectedIds.has(fIdx)) return;
             const fr = fi.getBoundingClientRect();
             if (e.clientX >= fr.left && e.clientX <= fr.right && e.clientY >= fr.top && e.clientY <= fr.bottom) {
-                // Move all non-folder selected items into this folder (descending splice, adjusted index)
-                const toMove = dd.items.filter(function(d) { return !d.item.isFolder; })
-                    .sort(function(a, b) { return b.index - a.index; });
-                let adjFIdx = fIdx;
-                toMove.forEach(function(d) {
-                    if (d.index < adjFIdx) adjFIdx--;
-                    const moved = links.splice(d.index, 1)[0];
-                    if (moved) links[adjFIdx].items.push(moved);
-                });
-                intoFolder = true;
-                selectedIndices.clear();
-                saveAndRender();
+                dropMultiIntoFolder(fIdx);
             }
         });
+
+        // Check open folder windows
+        if (!intoFolder) {
+            Object.keys(wmWindows).forEach(function(wid) {
+                if (intoFolder || !wid.startsWith('folder-')) return;
+                const win = wmWindows[wid];
+                if (!win || win.minimized) return;
+                const rect = win.el.getBoundingClientRect();
+                if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                    const fIdx = parseInt(wid.replace('folder-', ''));
+                    if (!isNaN(fIdx) && links[fIdx] && links[fIdx].isFolder && !selectedIds.has(fIdx)) {
+                        dropMultiIntoFolder(fIdx);
+                    }
+                }
+            });
+        }
 
         if (!intoFolder) {
             dd.items.forEach(function(d) {
@@ -284,23 +345,53 @@ document.addEventListener('mouseup', function(e) {
     y = Math.max(0, Math.min(y, dh - dd.icon.offsetHeight));
     if (settings.snapToGrid) { x = Math.round(x / SNAP) * SNAP; y = Math.round(y / SNAP) * SNAP; }
 
-    // check folder drop
+    // check folder drop (icon + open window)
     let intoFolder = false;
-    document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
-        fi.classList.remove('drag-over');
-        if (dd.item.isFolder) return;
-        const fIdx = parseInt(fi.dataset.index);
-        const fr = fi.getBoundingClientRect();
-        if (e.clientX >= fr.left && e.clientX <= fr.right && e.clientY >= fr.top && e.clientY <= fr.bottom) {
-            const moved  = links.splice(dd.index, 1)[0];
-            const adjIdx = dd.index < fIdx ? fIdx - 1 : fIdx;
-            links[adjIdx].items.push(moved);
-            intoFolder = true;
-            saveAndRender();
+    if (!dd.item.isFolder) {
+        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
+            fi.classList.remove('drag-over');
+            if (intoFolder) return;
+            const fIdx = parseInt(fi.dataset.index);
+            const fr = fi.getBoundingClientRect();
+            if (e.clientX >= fr.left && e.clientX <= fr.right && e.clientY >= fr.top && e.clientY <= fr.bottom) {
+                const moved  = links.splice(dd.index, 1)[0];
+                const adjIdx = dd.index < fIdx ? fIdx - 1 : fIdx;
+                links[adjIdx].items.push(moved);
+                // Refresh open folder window content
+                const wEntry = wmWindows['folder-' + fIdx];
+                if (wEntry && wEntry.el && wEntry.el._renderFolderContent) wEntry.el._renderFolderContent();
+                intoFolder = true;
+                saveAndRender();
+            }
+        });
+        if (!intoFolder) {
+            document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) { fi.classList.remove('drag-over'); });
+            Object.keys(wmWindows).forEach(function(wid) {
+                if (intoFolder || !wid.startsWith('folder-')) return;
+                const win = wmWindows[wid];
+                if (!win || win.minimized) return;
+                const rect = win.el.getBoundingClientRect();
+                if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                    const fIdx = parseInt(wid.replace('folder-', ''));
+                    if (!isNaN(fIdx) && links[fIdx] && links[fIdx].isFolder && fIdx !== dd.index) {
+                        const moved  = links.splice(dd.index, 1)[0];
+                        const adjIdx = dd.index < fIdx ? fIdx - 1 : fIdx;
+                        links[adjIdx].items.push(moved);
+                        const wEntry = wmWindows['folder-' + fIdx];
+                        if (wEntry && wEntry.el && wEntry.el._renderFolderContent) wEntry.el._renderFolderContent();
+                        intoFolder = true;
+                        saveAndRender();
+                    }
+                }
+            });
         }
-    });
+    } else {
+        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) { fi.classList.remove('drag-over'); });
+    }
 
     if (!intoFolder) {
+        const fp = findFreePosition(x, y, dd.icon.offsetWidth, dd.icon.offsetHeight, new Set([dd.icon]));
+        x = fp.x; y = fp.y;
         dd.item.x = x; dd.item.y = y; dd.item.dw = dw; dd.item.dh = dh;
         dd.icon.style.left = x + 'px'; dd.icon.style.top = y + 'px';
         dd.icon.style.zIndex = '';
