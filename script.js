@@ -15,8 +15,16 @@ const STORAGE = {
     snapToGrid: 'edge_snap_grid',
 };
 
-const SNAP = 10; // grid snap size in pixels
+const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
+const ICON_W    = 80;  // icon mode: rendered icon width  (px)
+const ICON_H    = 88;  // icon mode: rendered icon height (px)
+const ICON_CELL = 96;  // icon mode: grid cell = icon + gap (px)
 const TITLEBAR_H = 19; // tile titlebar height in px
+
+// Mode-specific position key: posIcon (icon mode) or posTile (tile mode)
+function getPosKey() { return settings.viewMode === 'icon' ? 'posIcon' : 'posTile'; }
+// Snap size: icon-cell-sized in icon mode (makes alignment trivial), fine in tile mode
+function getSnap()   { return settings.snapToGrid ? (settings.viewMode === 'icon' ? ICON_CELL : SNAP_TILE) : 1; }
 
 // ==================== STATE ====================
 let links = JSON.parse(localStorage.getItem(STORAGE.tiles)) || [
@@ -87,23 +95,25 @@ function updateClock() {
 }
 
 // ==================== PROPORTIONAL POSITIONING ====================
-// Each item stores item.x/y (pixels at time of save) + item.dw/dh (desktop size at that moment).
-// On render, positions are scaled to current desktop size → icons return to original place on expand.
+// Each item stores posIcon / posTile: {x, y, dw, dh} — one per view mode.
+// x/y are pixels at save time; dw/dh are the desktop size at that moment.
+// On render, positions are scaled → icons return proportionally after resize.
 function getDisplayPos(item) {
     const desktop = document.getElementById('desktop');
     const cw = desktop ? desktop.offsetWidth  : window.innerWidth;
     const ch = desktop ? desktop.offsetHeight : (window.innerHeight - 44);
-    const refW = (item && item.dw) ? item.dw : cw;
-    const refH = (item && item.dh) ? item.dh : ch;
+    const pos  = item ? item[getPosKey()] : null;
+    const refW = (pos && pos.dw) ? pos.dw : cw;
+    const refH = (pos && pos.dh) ? pos.dh : ch;
     return {
-        x: ((item && item.x) || 0) * (cw / refW),
-        y: ((item && item.y) || 0) * (ch / refH),
+        x: (pos && pos.x !== undefined) ? pos.x * (cw / refW) : 0,
+        y: (pos && pos.y !== undefined) ? pos.y * (ch / refH) : 0,
     };
 }
 
 // ==================== ICON DIMENSIONS ====================
 function getIconDim(item) {
-    if (settings.viewMode === 'icon') return { w: 80, h: 80 };  // classic XP icon
+    if (settings.viewMode === 'icon') return { w: ICON_W, h: ICON_H };
     const w = (item && item.w) ? item.w : settings.tileWidth;
     const h = (item && item.h) ? item.h : settings.tileHeight;
     return { w: w, h: h + TITLEBAR_H };
@@ -116,10 +126,10 @@ function assignPositions(forceAll) {
     const dw = desktopEl ? desktopEl.offsetWidth  : window.innerWidth;
     const dh = (desktopEl ? desktopEl.offsetHeight : (window.innerHeight - 44)) - GAP;
     let x = MARGIN, y = MARGIN;
+    const pk = getPosKey();
     links.forEach(function(item) {
-        if (forceAll || item.x === undefined) {
-            item.x = x; item.y = y;
-            item.dw = dw; item.dh = dh + GAP;
+        if (forceAll || !item[pk]) {
+            item[pk] = { x: x, y: y, dw: dw, dh: dh + GAP };
         }
         const dim = getIconDim(item);
         y += dim.h + GAP;
@@ -151,7 +161,7 @@ function findFreePosition(x, y, w, h, excludeEls) {
         return occupied.some(function(r) { return cx < r.r && cx + w > r.l && cy < r.b && cy + h > r.t; });
     }
     if (!collides(x, y)) return { x: x, y: y };
-    var step = Math.max(SNAP, 10);
+    var step = Math.max(SNAP_TILE, 10);
     for (var dist = step; dist < Math.max(dw, dh) * 2; dist += step) {
         for (var ox = -dist; ox <= dist; ox += step) {
             for (var oy = -dist; oy <= dist; oy += step) {
@@ -159,7 +169,7 @@ function findFreePosition(x, y, w, h, excludeEls) {
                 var nx = Math.max(0, Math.min(x + ox, dw - w));
                 var ny = Math.max(0, Math.min(y + oy, dh - h));
                 if (!collides(nx, ny)) {
-                    if (settings.snapToGrid) { nx = Math.round(nx / SNAP) * SNAP; ny = Math.round(ny / SNAP) * SNAP; }
+                    var _fs = getSnap(); if (settings.snapToGrid) { nx = Math.round(nx / _fs) * _fs; ny = Math.round(ny / _fs) * _fs; }
                     return { x: nx, y: ny };
                 }
             }
@@ -329,8 +339,8 @@ document.addEventListener('mouseup', function(e) {
                 let x = d.iconX + dx, y = d.iconY + dy;
                 x = Math.max(0, Math.min(x, dw - d.icon.offsetWidth));
                 y = Math.max(0, Math.min(y, dh - d.icon.offsetHeight));
-                if (settings.snapToGrid) { x = Math.round(x / SNAP) * SNAP; y = Math.round(y / SNAP) * SNAP; }
-                d.item.x = x; d.item.y = y; d.item.dw = dw; d.item.dh = dh;
+                const _s1 = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _s1) * _s1; y = Math.round(y / _s1) * _s1; }
+                d.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
                 d.icon.style.left = x + 'px'; d.icon.style.top = y + 'px';
                 d.icon._wasDragged = true;
             });
@@ -344,7 +354,7 @@ document.addEventListener('mouseup', function(e) {
     let x = dd.iconX + dx, y = dd.iconY + dy;
     x = Math.max(0, Math.min(x, dw - dd.icon.offsetWidth));
     y = Math.max(0, Math.min(y, dh - dd.icon.offsetHeight));
-    if (settings.snapToGrid) { x = Math.round(x / SNAP) * SNAP; y = Math.round(y / SNAP) * SNAP; }
+    const _snap = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _snap) * _snap; y = Math.round(y / _snap) * _snap; }
 
     // check folder drop (icon + open window)
     let intoFolder = false;
@@ -393,7 +403,7 @@ document.addEventListener('mouseup', function(e) {
     if (!intoFolder) {
         const fp = findFreePosition(x, y, dd.icon.offsetWidth, dd.icon.offsetHeight, new Set([dd.icon]));
         x = fp.x; y = fp.y;
-        dd.item.x = x; dd.item.y = y; dd.item.dw = dw; dd.item.dh = dh;
+        dd.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
         dd.icon.style.left = x + 'px'; dd.icon.style.top = y + 'px';
         dd.icon.style.zIndex = '';
         dd.icon._wasDragged = true;
@@ -412,14 +422,16 @@ function applyBackground() {
 function renderDesktop() {
     assignPositions(false);
 
-    // One-time migration: items saved without dw/dh get current desktop size as reference
+    // Migration: items with old flat x/y/dw/dh → mode-specific posIcon/posTile
     const desktopEl = document.getElementById('desktop');
     if (desktopEl) {
         const cw = desktopEl.offsetWidth, ch = desktopEl.offsetHeight;
+        const pk = getPosKey();
         let migrated = false;
         links.forEach(function(item) {
-            if (item.x !== undefined && !item.dw) {
-                item.dw = cw; item.dh = ch; migrated = true;
+            if (item.x !== undefined && !item[pk]) {
+                item[pk] = { x: item.x, y: item.y, dw: item.dw || cw, dh: item.dh || ch };
+                migrated = true;
             }
         });
         if (migrated) saveLinks();
@@ -752,7 +764,7 @@ function createAddButton() {
                 let x = iX + dx, y = iY + dy;
                 x = Math.max(0, Math.min(x, dw - btn.offsetWidth));
                 y = Math.max(0, Math.min(y, dh - btn.offsetHeight));
-                if (settings.snapToGrid) { x = Math.round(x / SNAP) * SNAP; y = Math.round(y / SNAP) * SNAP; }
+                if (settings.snapToGrid) { x = Math.round(x / SNAP_TILE) * SNAP_TILE; y = Math.round(y / SNAP_TILE) * SNAP_TILE; }
                 localStorage.setItem(STORAGE.addBtnPos, JSON.stringify({ x: x, y: y, dw: dw, dh: dh }));
                 btn.style.left = x + 'px'; btn.style.top = y + 'px';
                 btn._wasDragged = true;
@@ -884,7 +896,7 @@ function createSystemIcon(def, slotIndex) {
                 let x = iX + dx, y = iY + dy;
                 x = Math.max(0, Math.min(x, dw - icon.offsetWidth));
                 y = Math.max(0, Math.min(y, dh - icon.offsetHeight));
-                if (settings.snapToGrid) { x = Math.round(x / SNAP) * SNAP; y = Math.round(y / SNAP) * SNAP; }
+                if (settings.snapToGrid) { x = Math.round(x / SNAP_TILE) * SNAP_TILE; y = Math.round(y / SNAP_TILE) * SNAP_TILE; }
                 saveSysIconPos(def.id, x, y, dw, dh);
                 icon.style.left = x + 'px'; icon.style.top = y + 'px';
                 icon._wasDragged = true;
@@ -1012,12 +1024,12 @@ function initFolderItemDrag(itemEl, child, ci, folderIndex, getWin, selectedFold
 
                 // Place on desktop at drop coordinates (offset each item slightly)
                 movedItems.reverse().forEach(function(m, i) {
-                    let dropX = e.clientX - dr.left + i * SNAP;
-                    let dropY = e.clientY - dr.top  + i * SNAP;
+                    let dropX = e.clientX - dr.left + i * SNAP_TILE;
+                    let dropY = e.clientY - dr.top  + i * SNAP_TILE;
                     dropX = Math.max(0, Math.min(dropX, dw - 80));
                     dropY = Math.max(0, Math.min(dropY, dh - 80));
-                    if (settings.snapToGrid) { dropX = Math.round(dropX / SNAP) * SNAP; dropY = Math.round(dropY / SNAP) * SNAP; }
-                    m.x = dropX; m.y = dropY; m.dw = dw; m.dh = dh;
+                    const _sf = getSnap(); if (settings.snapToGrid) { dropX = Math.round(dropX / _sf) * _sf; dropY = Math.round(dropY / _sf) * _sf; }
+                    m[getPosKey()] = { x: dropX, y: dropY, dw: dw, dh: dh };
                     links.push(m);
                 });
 
