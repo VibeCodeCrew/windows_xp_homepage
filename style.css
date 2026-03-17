@@ -300,6 +300,7 @@ body {
     background: var(--xp-win-bg);
     display: flex; flex-direction: column;
     overflow: hidden;
+    transform-origin: center center;
 }
 
 .xp-titlebar {
@@ -693,3 +694,97 @@ body {
     background: #316ac5;
     -webkit-text-fill-color: white;
 }
+
+/* ===================== ANIMATIONS ===================== */
+
+/* XP window: appear on create */
+@keyframes wm-appear {
+    from { opacity: 0; transform: scale(0.88); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.xp-window.wm-appearing { animation: wm-appear 0.15s ease-out forwards; }
+
+/* XP window: close */
+@keyframes wm-close {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.85); }
+}
+.xp-window.wm-closing { animation: wm-close 0.12s ease-in forwards; pointer-events: none; }
+
+/* XP window: minimize to taskbar */
+@keyframes wm-minimize {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to   { opacity: 0; transform: scale(0.18) translateY(180px); }
+}
+.xp-window.wm-minimizing { animation: wm-minimize 0.18s ease-in forwards; pointer-events: none; }
+
+/* XP window: restore from taskbar */
+@keyframes wm-restore {
+    from { opacity: 0; transform: scale(0.18) translateY(180px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.xp-window.wm-restoring { animation: wm-restore 0.2s ease-out forwards; }
+
+/* Tile: minimize to taskbar */
+@keyframes tile-minimize {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to   { opacity: 0; transform: scale(0.12) translateY(220px); }
+}
+.xp-tile-window.tile-minimizing {
+    animation: tile-minimize 0.18s ease-in forwards;
+    pointer-events: none;
+}
+
+/* Tile: restore from taskbar */
+@keyframes tile-restore {
+    from { opacity: 0; transform: scale(0.12) translateY(220px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.xp-tile-window.tile-restoring { animation: tile-restore 0.2s ease-out forwards; }
+
+/* Tile: "maximize" → open URL — expands to fill screen then navigates */
+@keyframes tile-open {
+    0%   { opacity: 1; transform: scale(1); }
+    60%  { opacity: 0.15; transform: scale(18); }
+    100% { opacity: 0; transform: scale(24); }
+}
+.xp-tile-window.tile-opening {
+    animation: tile-open 0.32s ease-in forwards;
+    z-index: 10000 !important;
+    pointer-events: none;
+    transform-origin: center center;
+}
+
+/* Start menu: slide up from taskbar */
+@keyframes sm-appear {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+#start-menu:not(.hidden) { animation: sm-appear 0.15s ease-out; }
+
+/* Context menu: quick fade+scale */
+@keyframes ctx-appear {
+    from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+#context-menu:not(.hidden) {
+    animation: ctx-appear 0.1s ease-out;
+    transform-origin: top left;
+}
+
+/* Taskbar window button: slide in from left */
+@keyframes taskbar-btn-in {
+    from { opacity: 0; max-width: 0; padding-left: 0; padding-right: 0; }
+    to   { opacity: 1; max-width: 160px; }
+}
+.taskbar-win-btn {
+    animation: taskbar-btn-in 0.14s ease-out;
+    overflow: hidden;
+}
+
+/* Desktop icon: appear when added */
+@keyframes icon-appear {
+    from { opacity: 0; transform: scale(0.75); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.desktop-icon.icon-appearing { animation: icon-appear 0.15s ease-out forwards; }
