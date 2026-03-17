@@ -26,6 +26,7 @@ let links = JSON.parse(localStorage.getItem(STORAGE.tiles)) || [
 let trashedLinks = JSON.parse(localStorage.getItem(STORAGE.trash)) || [];
 let username     = localStorage.getItem(STORAGE.username) || 'User';
 let selectedIndices = new Set();
+let minimizedTiles  = new Set(); // indices of tiles minimized to taskbar
 
 let settings = {
     tileWidth:  parseInt(localStorage.getItem(STORAGE.tileWidth))  || 130,
@@ -438,6 +439,21 @@ function renderDesktop() {
 
     container.appendChild(createAddButton());
     SYSTEM_ICONS_DEF.forEach(function(def, i) { container.appendChild(createSystemIcon(def, i)); });
+
+    // Re-apply minimized tile state; clean stale indices
+    const staleMin = [];
+    minimizedTiles.forEach(function(idx) {
+        const el = container.querySelector('.desktop-icon[data-index="' + idx + '"]');
+        if (el) { el.style.display = 'none'; addTileTaskbarBtn(idx); }
+        else staleMin.push(idx);
+    });
+    staleMin.forEach(function(idx) { minimizedTiles.delete(idx); });
+    // Remove stale taskbar tile buttons whose links no longer exist
+    document.querySelectorAll('.taskbar-tile-btn').forEach(function(btn) {
+        const idx = parseInt(btn.dataset.tileIndex);
+        if (isNaN(idx) || !links[idx]) btn.remove();
+    });
+
     updateSelectionUI();
 }
 
@@ -445,6 +461,51 @@ function placeIcon(icon, item) {
     const pos = getDisplayPos(item);
     icon.style.left = pos.x + 'px';
     icon.style.top  = pos.y + 'px';
+}
+
+// ==================== TILE MINIMIZE / RESTORE / OPEN ====================
+function tileMinimize(index, iconEl) {
+    if (minimizedTiles.has(index)) return;
+    iconEl.classList.add('tile-minimizing');
+    setTimeout(function() {
+        if (!document.body.contains(iconEl)) return;
+        iconEl.style.display = 'none';
+        iconEl.classList.remove('tile-minimizing');
+        minimizedTiles.add(index);
+        addTileTaskbarBtn(index);
+    }, 190);
+}
+
+function addTileTaskbarBtn(index) {
+    if (document.querySelector('.taskbar-tile-btn[data-tile-index="' + index + '"]')) return;
+    const item = links[index]; if (!item) return;
+    const bar = document.getElementById('taskbar-windows');
+    const btn = document.createElement('button');
+    btn.className = 'taskbar-win-btn taskbar-tile-btn';
+    btn.dataset.tileIndex = index;
+    const favicon = item.customIcon || getFaviconUrl(item.url);
+    btn.innerHTML =
+        '<img src="' + escapeHtml(favicon) + '" style="width:14px;height:14px;object-fit:contain;flex-shrink:0" alt="">' +
+        '<span class="taskbar-btn-title">' + escapeHtml(item.name) + '</span>';
+    btn.addEventListener('click', function() { tileRestore(index); });
+    bar.appendChild(btn);
+}
+
+function tileRestore(index) {
+    minimizedTiles.delete(index);
+    const iconEl = document.querySelector('.desktop-icon[data-index="' + index + '"]');
+    if (iconEl) {
+        iconEl.style.display = '';
+        iconEl.classList.add('tile-restoring');
+        setTimeout(function() { iconEl.classList.remove('tile-restoring'); }, 210);
+    }
+    const btn = document.querySelector('.taskbar-tile-btn[data-tile-index="' + index + '"]');
+    if (btn) btn.remove();
+}
+
+function tileMaxOpen(iconEl, url) {
+    iconEl.classList.add('tile-opening');
+    setTimeout(function() { navToUrl(url); }, 300);
 }
 
 // ---- Window mode: link tile ----
@@ -466,8 +527,8 @@ function createLinkIconWindow(item, index) {
         '<img class="tile-favicon" src="' + escapeHtml(favicon) + '" alt="">' +
         '<span class="tile-name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + '</span>' +
         '<div class="tile-btns">' +
-          '<button class="tile-btn tile-btn-min" title="Свернуть (не активно)">&#8211;</button>' +
-          '<button class="tile-btn tile-btn-max" title="Развернуть (не активно)">&#9633;</button>' +
+          '<button class="tile-btn tile-btn-min" title="Свернуть">&#8211;</button>' +
+          '<button class="tile-btn tile-btn-max" title="Открыть страницу">&#9633;</button>' +
           '<button class="tile-btn tile-btn-close" title="Убрать в корзину">&#x2715;</button>' +
         '</div>';
 
@@ -530,8 +591,8 @@ function createLinkIconWindow(item, index) {
         e.stopPropagation();
         trashLink(index);
     });
-    tb.querySelector('.tile-btn-min').addEventListener('click', function(e) { e.stopPropagation(); });
-    tb.querySelector('.tile-btn-max').addEventListener('click', function(e) { e.stopPropagation(); });
+    tb.querySelector('.tile-btn-min').addEventListener('click', function(e) { e.stopPropagation(); tileMinimize(index, icon); });
+    tb.querySelector('.tile-btn-max').addEventListener('click', function(e) { e.stopPropagation(); tileMaxOpen(icon, item.url); });
     tb.querySelector('.tile-btns').addEventListener('mousedown', function(e) { e.stopPropagation(); });
     rh.addEventListener('mousedown', function(e) { e.stopPropagation(); }); // already done above
 
@@ -873,6 +934,17 @@ function trashLink(index) {
     const newSel = new Set();
     selectedIndices.forEach(function(i) { newSel.add(i > index ? i - 1 : i); });
     selectedIndices = newSel;
+    // Update minimizedTiles indices
+    minimizedTiles.delete(index);
+    const newMin = new Set();
+    minimizedTiles.forEach(function(i) { newMin.add(i > index ? i - 1 : i); });
+    minimizedTiles = newMin;
+    // Update taskbar tile button dataset indices
+    document.querySelectorAll('.taskbar-tile-btn').forEach(function(btn) {
+        const i = parseInt(btn.dataset.tileIndex);
+        if (i === index) btn.remove();
+        else if (i > index) btn.dataset.tileIndex = i - 1;
+    });
     const deleted = links.splice(index, 1)[0];
     if (deleted) { deleted.deletedAt = Date.now(); trashedLinks.push(deleted); localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks)); }
     saveAndRender();
@@ -1093,6 +1165,9 @@ function wmCreate(id, title, contentEl, width, height, icon) {
     const rh = document.createElement('div'); rh.className = 'xp-resize-handle';
     win.appendChild(tb); win.appendChild(c); win.appendChild(rh);
     document.body.appendChild(win);
+    // Appear animation
+    win.classList.add('wm-appearing');
+    setTimeout(function() { if (win.parentNode) win.classList.remove('wm-appearing'); }, 160);
 
     wmWindows[id] = { el: win, taskbarBtn: null, minimized: false, maximized: false, savedRect: null };
     wmMakeDraggable(win, tb); wmMakeResizable(win, rh);
@@ -1113,8 +1188,28 @@ function wmFocus(id) {
     wmWindows[id].el.style.zIndex = ++wmZIndex;
     if (wmWindows[id].taskbarBtn) wmWindows[id].taskbarBtn.classList.add('active');
 }
-function wmMinimize(id) { if (!wmWindows[id]) return; wmWindows[id].el.style.display='none'; wmWindows[id].minimized=true; if (wmWindows[id].taskbarBtn) wmWindows[id].taskbarBtn.classList.remove('active'); activeWindowId=null; }
-function wmRestore(id)  { if (!wmWindows[id]) return; wmWindows[id].el.style.display='flex'; wmWindows[id].minimized=false; }
+function wmMinimize(id) {
+    if (!wmWindows[id]) return;
+    const w = wmWindows[id];
+    if (w.minimized) return;
+    w.el.classList.add('wm-minimizing');
+    if (w.taskbarBtn) w.taskbarBtn.classList.remove('active');
+    activeWindowId = null;
+    setTimeout(function() {
+        if (!wmWindows[id]) return;
+        w.el.style.display = 'none';
+        w.el.classList.remove('wm-minimizing');
+        w.minimized = true;
+    }, 185);
+}
+function wmRestore(id) {
+    if (!wmWindows[id]) return;
+    const w = wmWindows[id];
+    w.el.style.display = 'flex';
+    w.minimized = false;
+    w.el.classList.add('wm-restoring');
+    setTimeout(function() { if (wmWindows[id]) w.el.classList.remove('wm-restoring'); }, 210);
+}
 function wmMaximize(id) {
     if (!wmWindows[id]) return; const w = wmWindows[id];
     if (w.maximized) {
@@ -1126,7 +1221,18 @@ function wmMaximize(id) {
         w.maximized=true; w.el.querySelector('.xp-btn-max').innerHTML='&#10064;';
     }
 }
-function wmClose(id) { if (!wmWindows[id]) return; wmWindows[id].el.remove(); if (wmWindows[id].taskbarBtn) wmWindows[id].taskbarBtn.remove(); delete wmWindows[id]; if (activeWindowId===id) activeWindowId=null; }
+function wmClose(id) {
+    if (!wmWindows[id]) return;
+    const w = wmWindows[id];
+    w.el.classList.add('wm-closing');
+    if (w.taskbarBtn) w.taskbarBtn.remove();
+    if (activeWindowId === id) activeWindowId = null;
+    setTimeout(function() {
+        if (!wmWindows[id]) return;
+        w.el.remove();
+        delete wmWindows[id];
+    }, 125);
+}
 function wmAddToTaskbar(id, title, icon) {
     const bar = document.getElementById('taskbar-windows'), btn = document.createElement('button');
     btn.className = 'taskbar-win-btn';
