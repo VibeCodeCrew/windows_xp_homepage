@@ -83,8 +83,58 @@ let settings = {
     }
 }());
 
-function saveLinks() { localStorage.setItem(STORAGE.tiles, JSON.stringify(links)); }
+function saveLinks() {
+    function strip(item) {
+        const c = Object.assign({}, item);
+        delete c.screenshot;
+        if (c.items) c.items = c.items.map(strip);
+        return c;
+    }
+    localStorage.setItem(STORAGE.tiles, JSON.stringify(links.map(strip)));
+}
 function saveAndRender() { saveLinks(); renderDesktop(); }
+
+// ==================== SCREENSHOT STORAGE ====================
+const SS_PREFIX = 'ss_';
+function screenshotKey(url) { return SS_PREFIX + url; }
+function saveScreenshot(url, dataUrl) {
+    if (typeof chrome !== 'undefined' && chrome.storage) chrome.storage.local.set({ [screenshotKey(url)]: dataUrl });
+}
+function deleteScreenshot(url) {
+    if (typeof chrome !== 'undefined' && chrome.storage) chrome.storage.local.remove(screenshotKey(url));
+}
+// Loads screenshots from chrome.storage.local into in-memory links items.
+// Also migrates any old base64 screenshots found in localStorage.
+function initScreenshots(callback) {
+    if (typeof chrome === 'undefined' || !chrome.storage) { callback(); return; }
+    // Collect screenshots already in memory (old localStorage format) for migration
+    const toMigrate = {};
+    function collectOld(items) {
+        items.forEach(function(item) {
+            if (item.url && item.screenshot) toMigrate[screenshotKey(item.url)] = item.screenshot;
+            if (item.isFolder && item.items) collectOld(item.items);
+        });
+    }
+    collectOld(links);
+    function doLoad() {
+        const urlMap = {};
+        links.forEach(function(item) {
+            if (!item.isFolder && item.url) urlMap[screenshotKey(item.url)] = item;
+            if (item.isFolder && item.items) item.items.forEach(function(child) { if (child.url) urlMap[screenshotKey(child.url)] = child; });
+        });
+        const keys = Object.keys(urlMap);
+        if (!keys.length) { callback(); return; }
+        chrome.storage.local.get(keys, function(result) {
+            keys.forEach(function(k) { if (result[k]) urlMap[k].screenshot = result[k]; });
+            callback();
+        });
+    }
+    if (Object.keys(toMigrate).length > 0) {
+        chrome.storage.local.set(toMigrate, function() { saveLinks(); doLoad(); });
+    } else {
+        doLoad();
+    }
+}
 
 // ==================== SELECTION ====================
 function selectIcon(index, ctrlKey) {
@@ -358,6 +408,11 @@ function initIconDrag(icon, item, index) {
                 moved: false,
             };
         }
+        // Cache desktop dimensions and folder icons for use in mousemove (avoids layout thrashing)
+        const _desk = document.getElementById('desktop');
+        dragData._dw = _desk ? _desk.offsetWidth : 1200;
+        dragData._dh = _desk ? _desk.offsetHeight : 800;
+        dragData._folderIcons = Array.from(document.querySelectorAll('.desktop-icon.folder-icon'));
         icon.style.zIndex = 999;
     });
 }
@@ -368,9 +423,8 @@ document.addEventListener('mousemove', function(e) {
     if (!dragData.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
     dragData.moved = true;
 
-    const desktop = document.getElementById('desktop');
-    const dw = desktop ? desktop.offsetWidth  : 1200;
-    const dh = desktop ? desktop.offsetHeight : 800;
+    const dw = dragData._dw || 1200;
+    const dh = dragData._dh || 800;
 
     if (dragData.multi) {
         dragData.items.forEach(function(d) {
@@ -383,7 +437,7 @@ document.addEventListener('mousemove', function(e) {
         });
         // Folder hover feedback for multi-drag
         const selectedIds = new Set(dragData.items.map(function(d) { return parseInt(d.icon.dataset.index); }));
-        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
+        (dragData._folderIcons || []).forEach(function(fi) {
             const fIdx = parseInt(fi.dataset.index);
             if (selectedIds.has(fIdx)) { fi.classList.remove('drag-over'); return; }
             const fr = fi.getBoundingClientRect();
@@ -397,7 +451,7 @@ document.addEventListener('mousemove', function(e) {
         dragData.icon.style.left = x + 'px';
         dragData.icon.style.top  = y + 'px';
         // folder hover feedback (single drag only)
-        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
+        (dragData._folderIcons || []).forEach(function(fi) {
             const fIdx = parseInt(fi.dataset.index);
             if (fIdx === dragData.index || dragData.item.isFolder) { fi.classList.remove('drag-over'); return; }
             const fr = fi.getBoundingClientRect();
@@ -416,9 +470,8 @@ document.addEventListener('mouseup', function(e) {
         return;
     }
 
-    const desktop = document.getElementById('desktop');
-    const dw = desktop ? desktop.offsetWidth  : 1200;
-    const dh = desktop ? desktop.offsetHeight : 800;
+    const dw = dd._dw || 1200;
+    const dh = dd._dh || 800;
     const dx = e.clientX - dd.startX, dy = e.clientY - dd.startY;
 
     if (dd.multi) {
@@ -446,7 +499,7 @@ document.addEventListener('mouseup', function(e) {
         }
 
         // Check folder icons
-        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
+        (dd._folderIcons || []).forEach(function(fi) {
             fi.classList.remove('drag-over');
             if (intoFolder) return;
             const fIdx = parseInt(fi.dataset.index);
@@ -506,7 +559,7 @@ document.addEventListener('mouseup', function(e) {
     // check folder drop (icon + open window)
     let intoFolder = false;
     if (!dd.item.isFolder) {
-        document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) {
+        (dd._folderIcons || []).forEach(function(fi) {
             fi.classList.remove('drag-over');
             if (intoFolder) return;
             const fIdx = parseInt(fi.dataset.index);
@@ -523,7 +576,7 @@ document.addEventListener('mouseup', function(e) {
             }
         });
         if (!intoFolder) {
-            document.querySelectorAll('.desktop-icon.folder-icon').forEach(function(fi) { fi.classList.remove('drag-over'); });
+            (dd._folderIcons || []).forEach(function(fi) { fi.classList.remove('drag-over'); });
             Object.keys(wmWindows).forEach(function(wid) {
                 if (intoFolder || !wid.startsWith('folder-')) return;
                 const win = wmWindows[wid];
@@ -1391,7 +1444,13 @@ function trashLink(index) {
         else if (i > index) btn.dataset.tileIndex = i - 1;
     });
     const deleted = links.splice(index, 1)[0];
-    if (deleted) { deleted.deletedAt = Date.now(); trashedLinks.push(deleted); localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks)); }
+    if (deleted) {
+        deleted.deletedAt = Date.now();
+        trashedLinks.push(deleted);
+        localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks));
+        if (deleted.url) deleteScreenshot(deleted.url);
+        if (deleted.isFolder && deleted.items) deleted.items.forEach(function(ch) { if (ch.url) deleteScreenshot(ch.url); });
+    }
     saveAndRender();
 }
 
@@ -2079,6 +2138,7 @@ async function requestScreenshot(url, targetItem) {
     chrome.runtime.sendMessage({ action: 'capture_screenshot', url: url }, (response) => {
         if (response && response.success) {
             targetItem.screenshot = response.dataUrl;
+            saveScreenshot(url, response.dataUrl);
             saveAndRender();
             console.log('Скриншот успешно получен и сохранен');
         } else {
@@ -4175,7 +4235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     applyBackground();
     const smUser = document.querySelector('.sm-username');
     if (smUser) smUser.textContent = username;
-    renderDesktop();
+    initScreenshots(function() { renderDesktop(); });
     updateClock();
     setInterval(updateClock, 1000);
 

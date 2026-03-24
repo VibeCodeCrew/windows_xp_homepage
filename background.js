@@ -107,6 +107,7 @@ async function resizeImage(src, width, height) {
     const sx = (width - sw) / 2;
     const sy = (height - sh) / 2;
     ctx.drawImage(bitmap, sx, sy, sw, sh);
+    bitmap.close();
 
     const resultBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
     return new Promise((resolve) => {
