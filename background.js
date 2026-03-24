@@ -1,79 +1,113 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'capture_screenshot') {
         captureTab(message.url, sendResponse);
-        return true; 
+        return true;
     }
 });
 
-async function captureTab(url, sendResponse) {
+// Проверяем, можно ли вообще делать скриншот/fetch для данного URL
+function isCapturableUrl(url) {
     try {
-        // Создаем невидимое окно за пределами экрана
+        const u = new URL(url);
+        // Только http/https
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+        // Магазины расширений — запрещено браузером
+        if (u.hostname === 'chrome.google.com' && u.pathname.startsWith('/webstore')) return false;
+        if (u.hostname === 'microsoftedge.microsoft.com' && u.pathname.startsWith('/addons')) return false;
+        if (u.hostname === 'addons.mozilla.org') return false;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+async function captureTab(url, sendResponse) {
+    // Ранний выход для URL, которые браузер запрещает захватывать
+    if (!isCapturableUrl(url)) {
+        sendResponse({ success: false, error: 'URL не поддерживает захват миниатюры' });
+        return;
+    }
+
+    // Скриншот через popup-окно
+    try {
         const win = await chrome.windows.create({
             url: url,
-            left: -10000,
-            top: -10000,
+            left: 0,
+            top: 0,
             width: 1024,
             height: 768,
             type: 'popup',
-            focused: false // Не отбираем фокус у пользователя
+            focused: false
         });
 
         const targetTabId = win.tabs[0].id;
+        let captured = false;
 
-        // Предохранитель: если страница грузится слишком долго (более 15 секунд)
+        const doCapture = async () => {
+            if (captured) return;
+            captured = true;
+            clearTimeout(fallbackTimer);
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+
+            // Ждём рендеринг SPA-сайтов
+            setTimeout(async () => {
+                try {
+                    await chrome.windows.update(win.id, { focused: true });
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    const dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 50 });
+                    const compressedBase64 = await resizeImage(dataUrl, 300, 218);
+
+                    chrome.windows.remove(win.id).catch(() => {});
+                    sendResponse({ success: true, dataUrl: compressedBase64 });
+                } catch (e) {
+                    chrome.windows.remove(win.id).catch(() => {});
+                    sendResponse({ success: false, error: e.message });
+                }
+            }, 2500);
+        };
+
         const fallbackTimer = setTimeout(() => {
             chrome.tabs.onUpdated.removeListener(onUpdated);
-            chrome.windows.remove(win.id).catch(() => {});
-            try {
-                sendResponse({ success: false, error: 'Timeout: страница грузилась слишком долго' });
-            } catch (e) {} // Игнорируем ошибку, если порт уже закрыт
+            if (!captured) {
+                captured = true;
+                chrome.windows.remove(win.id).catch(() => {});
+                try { sendResponse({ success: false, error: 'Timeout' }); } catch (e) {}
+            }
         }, 15000);
 
-        const onUpdated = async (tabId, info) => {
-            if (tabId === targetTabId && info.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(onUpdated);
-                clearTimeout(fallbackTimer); // Отменяем предохранитель, если загрузились вовремя
-                
-                // Ждем 2.5 секунды, чтобы тяжелые сайты (SPA) точно отрендерились
-                setTimeout(async () => {
-                    try {
-                        // ВОТ РЕШЕНИЕ ПРОБЛЕМЫ:
-                        // Переносим окно в видимую зону на долю секунды, чтобы заставить Chrome отрисовать страницу
-                        await chrome.windows.update(win.id, { left: 0, top: 0, focused: false });
-                        await new Promise(resolve => setTimeout(resolve, 300)); // Даем видеокарте 300мс на рендеринг пикселей
-
-                        const dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 50 });
-                        
-                        // Сжимаем картинку
-                        const compressedBase64 = await resizeImage(dataUrl, 300, 218);
-                        
-                        // Убираем следы
-                        chrome.windows.remove(win.id).catch(() => {});
-                        sendResponse({ success: true, dataUrl: compressedBase64 });
-                    } catch (e) {
-                        chrome.windows.remove(win.id).catch(() => {});
-                        sendResponse({ success: false, error: e.message });
-                    }
-                }, 2500); 
-            }
+        const onUpdated = (tabId, info) => {
+            if (tabId === targetTabId && info.status === 'complete') doCapture();
         };
 
         chrome.tabs.onUpdated.addListener(onUpdated);
+
+        // Race condition fix: если таб уже загрузился до того, как мы повесили слушатель
+        chrome.tabs.get(targetTabId).then(tab => {
+            if (tab.status === 'complete') doCapture();
+        }).catch(() => {});
     } catch (e) {
         sendResponse({ success: false, error: e.message });
     }
 }
 
-// Вспомогательная функция для ресайза
-async function resizeImage(base64, width, height) {
-    const response = await fetch(base64);
+// Ресайз картинки в нужный размер и формат
+async function resizeImage(src, width, height) {
+    const response = await fetch(src);
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
-    
+
     const canvas = new OffscreenCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    
+
+    // Вписываем с сохранением пропорций (cover)
+    const scale = Math.max(width / bitmap.width, height / bitmap.height);
+    const sw = bitmap.width * scale;
+    const sh = bitmap.height * scale;
+    const sx = (width - sw) / 2;
+    const sy = (height - sh) / 2;
+    ctx.drawImage(bitmap, sx, sy, sw, sh);
+
     const resultBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
     return new Promise((resolve) => {
         const reader = new FileReader();

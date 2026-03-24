@@ -6,7 +6,8 @@
     "tabs",
     "bookmarks",
     "favicon",
-    "storage"
+    "storage",
+    "windows"
   ],
   "background": {
     "service_worker": "background.js"
