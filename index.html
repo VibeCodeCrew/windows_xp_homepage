@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Новая вкладка</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Desktop -->
+    <div id="desktop">
+        <div id="desktop-icons"></div>
+    </div>
+
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <button id="start-btn">
+            <span class="start-logo"><svg class="start-flag" width="15" height="15" viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="6" height="6" fill="#f35325"/><rect x="9" y="0" width="6" height="6" fill="#81bc06"/><rect x="0" y="9" width="6" height="6" fill="#05a6f0"/><rect x="9" y="9" width="6" height="6" fill="#ffba08"/></svg></span>
+            <span class="start-label">Пуск</span>
+        </button>
+        <div id="taskbar-sep"></div>
+        <div id="taskbar-windows"></div>
+        <div id="systray">
+            <div id="tray-clock">
+                <div id="tray-time">00:00</div>
+                <div id="tray-date">дата</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Menu -->
+    <div id="start-menu" class="hidden">
+        <div class="sm-header">
+            <div class="sm-avatar">&#128100;</div>
+            <div class="sm-username">User</div>
+        </div>
+        <div class="sm-body">
+            <div id="sm-all-programs" class="hidden">
+                <div class="sm-back-btn">
+                    <span class="sm-icon">&#9664;</span>Назад
+                </div>
+                <div id="sm-programs-list"></div>
+            </div>
+            <div class="sm-left">
+                <div class="sm-item" data-action="search">
+                    <span class="sm-icon">&#128269;</span>Поиск в интернете
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="notepad">
+                    <span class="sm-icon">&#128221;</span>Блокнот
+                </div>
+                <div class="sm-item" data-action="calculator">
+                    <span class="sm-icon">&#128290;</span>Калькулятор
+                </div>
+                <div class="sm-item" data-action="minesweeper">
+                    <span class="sm-icon">&#128163;</span>Сапёр
+                </div>
+                <div class="sm-item" data-action="solitaire">
+                    <span class="sm-icon">&#9824;</span>Косынка
+                </div>
+                <div class="sm-item" data-action="hearts">
+                    <span class="sm-icon">&#9829;</span>Червы
+                </div>
+                <div class="sm-item" data-action="pinball">
+                    <span class="sm-icon">&#9899;</span>Пинбол
+                </div>
+                <div class="sm-item" data-action="paint">
+                    <span class="sm-icon">&#127912;</span>Paint
+                </div>
+                <div class="sm-item" data-action="wordpad">
+                    <span class="sm-icon">&#128196;</span>WordPad
+                </div>
+                <div class="sm-item" data-action="cmd">
+                    <span class="sm-icon">&#9744;</span>Командная строка
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="settings">
+                    <span class="sm-icon">&#9881;</span>Настройки
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item sm-allprograms-btn" data-action="allprograms">
+                    <span class="sm-icon">&#128196;</span>Все программы
+                    <span class="sm-allprograms-arrow">&#9658;</span>
+                </div>
+            </div>
+            <div class="sm-right">
+                <div class="sm-item" data-action="mycomputer">
+                    <span class="sm-icon">&#128421;</span>Мой компьютер
+                </div>
+                <div class="sm-item" data-action="recycle">
+                    <span class="sm-icon">&#128465;</span>Корзина
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="setbg">
+                    <span class="sm-icon">&#128444;</span>Свой фон
+                </div>
+                <div class="sm-item" data-action="removebg">
+                    <span class="sm-icon">&#10060;</span>Сбросить фон
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="export">
+                    <span class="sm-icon">&#128190;</span>Экспорт данных
+                </div>
+                <div class="sm-item" data-action="import">
+                    <span class="sm-icon">&#128193;</span>Импорт данных
+                </div>
+            </div>
+        </div>
+        <div class="sm-footer">
+            <button class="sm-shutdown-btn" data-action="shutdown">
+                <span class="sm-shutdown-icon">&#9211;</span> Завершение работы
+            </button>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="xp-context-menu hidden"></div>
+
+    <!-- Hidden inputs -->
+    <input type="file" id="bg-upload" accept="image/*" class="hidden">
+    <input type="file" id="import-upload" accept=".json" class="hidden">
+
+    <script src="script.js"></script>
+</body>
+</html>
