@@ -1,9 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "Custom Edge Startpage",
-  "version": "1.0",
-  "permissions": ["tabs"],
+  "name": "Nostalgic Startpage",
+  "version": "1.1",
+  "permissions": [
+    "tabs",
+    "bookmarks",
+    "favicon",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "chrome_url_overrides": {
     "newtab": "index.html"
-  }
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }
