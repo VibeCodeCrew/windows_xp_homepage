@@ -13,15 +13,6 @@ const STORAGE = {
     notepad:    'edge_notepad',
     viewMode:   'edge_view_mode',
     snapToGrid: 'edge_snap_grid',
-    posGlass:       'edge_pos_glass',
-    iconSize:       'edge_icon_size',
-    glassTileWidth: 'edge_glass_tile_width',
-    glassTileHeight:'edge_glass_tile_height',
-    glassGap:       'edge_glass_gap',
-    glassSnap:      'edge_glass_snap',
-    glassPreset:    'edge_glass_preset',
-    glassCols:      'edge_glass_cols',
-    glassBlur:      'edge_glass_blur',
 };
 
 const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
@@ -30,14 +21,10 @@ const ICON_H    = 88;  // icon mode: rendered icon height (px)
 const ICON_CELL = 96;  // icon mode: grid cell = icon + gap (px)
 const TITLEBAR_H = 19; // tile titlebar height in px
 
-// Mode-specific position key: posIcon (icon mode), posGlass (glass mode) or posTile (tile mode)
-function getPosKey() {
-  if (settings.viewMode === 'icon') return 'posIcon';
-  if (settings.viewMode === 'glass') return 'posGlass';
-  return 'posTile';
-}
-// Snap size: icon-cell-sized in icon mode, 16px in glass mode, fine in tile mode
-function getSnap() { return settings.snapToGrid ? (settings.viewMode === 'icon' ? (settings.iconSize + 16) : (settings.viewMode === 'glass' ? 16 : SNAP_TILE)) : 1; }
+// Mode-specific position key: posIcon (icon mode) or posTile (tile mode)
+function getPosKey() { return settings.viewMode === 'icon' ? 'posIcon' : 'posTile'; }
+// Snap size: icon-cell-sized in icon mode (makes alignment trivial), fine in tile mode
+function getSnap()   { return settings.snapToGrid ? (settings.viewMode === 'icon' ? ICON_CELL : SNAP_TILE) : 1; }
 
 // ==================== STATE ====================
 let links = JSON.parse(localStorage.getItem(STORAGE.tiles)) || [
@@ -48,40 +35,15 @@ let trashedLinks = JSON.parse(localStorage.getItem(STORAGE.trash)) || [];
 let username     = localStorage.getItem(STORAGE.username) || 'User';
 let selectedIndices = new Set();
 let minimizedTiles  = new Set(); // indices of tiles minimized to taskbar
-let minesweeperLosses = 0;
 
 let settings = {
     tileWidth:  parseInt(localStorage.getItem(STORAGE.tileWidth))  || 130,
     tileHeight: parseInt(localStorage.getItem(STORAGE.tileHeight)) || 90,
     opacity:    parseFloat(localStorage.getItem(STORAGE.opacity))  || 0.9,
     blur:       localStorage.getItem(STORAGE.blur) === 'true',
-    viewMode:   localStorage.getItem(STORAGE.viewMode)  || 'glass', // 'glass' | 'window' | 'icon'
-    snapToGrid:     localStorage.getItem(STORAGE.snapToGrid) !== 'false',
-    iconSize:       parseInt(localStorage.getItem(STORAGE.iconSize))       || 80,
-    glassTileWidth: parseInt(localStorage.getItem(STORAGE.glassTileWidth)) || 120,
-    glassTileHeight:parseInt(localStorage.getItem(STORAGE.glassTileHeight))|| 89,
-    glassGap:       parseInt(localStorage.getItem(STORAGE.glassGap))       || 16,
-    glassSnap:      localStorage.getItem(STORAGE.glassSnap) !== 'false',
-    glassPreset:    localStorage.getItem(STORAGE.glassPreset) || 'medium',
-    glassCols:      parseInt(localStorage.getItem(STORAGE.glassCols)) || 5,
-    glassBlur:      localStorage.getItem(STORAGE.glassBlur) === 'true',
-    glassScreenshotBg: localStorage.getItem('edge_glass_screenshot_bg') === 'true',
+    viewMode:   localStorage.getItem(STORAGE.viewMode)  || 'window', // 'window' | 'icon'
+    snapToGrid: localStorage.getItem(STORAGE.snapToGrid) !== 'false',
 };
-// Resolve tile size from preset if not manually set (or migrating from old horizontal defaults)
-(function() {
-    function computePresetSize(preset, gap) {
-        var dw = window.innerWidth, g = gap || 16;
-        var cols = {large:3, medium:5, small:7}[preset] || 5;
-        return Math.max(70, Math.min(300, Math.floor((dw - 32 + g) / cols - g)));
-    }
-    var needReset = !settings.glassTileWidth || settings.glassTileHeight <= 60;
-    if (needReset) {
-        var sz = computePresetSize(settings.glassPreset, settings.glassGap);
-        settings.glassTileWidth = sz; settings.glassTileHeight = sz;
-        localStorage.setItem(STORAGE.glassTileWidth, sz);
-        localStorage.setItem(STORAGE.glassTileHeight, sz);
-    }
-}());
 
 function saveLinks() { localStorage.setItem(STORAGE.tiles, JSON.stringify(links)); }
 function saveAndRender() { saveLinks(); renderDesktop(); }
@@ -118,59 +80,11 @@ function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 function getFaviconUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        // Используем внутренний сервис Chrome для фавиконок
-        return `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(urlObj.href)}&size=32`;
-    } catch (e) {
-        return '';
-    }
+    try { return 'https://favicon.yandex.net/favicon/' + new URL(url).hostname + '?size=32'; } catch { return ''; }
 }
+function getThumbUrl(url) { return 'https://image.thum.io/get/width/800/crop/500/' + url; }
 
 const pageLoadTime = Date.now();
-
-// ==================== BSOD ====================
-function triggerBSOD() {
-    const bsod = document.createElement('div');
-    bsod.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#0000aa;color:#fff;font-family:"Lucida Console","Courier New",monospace;font-size:14px;line-height:1.6;z-index:99999;padding:48px 60px;box-sizing:border-box;white-space:pre-wrap;';
-    bsod.textContent = [
-        'A problem has been detected and Windows has been shut down to prevent damage',
-        'to your computer.',
-        '',
-        'IRQL_NOT_LESS_OR_EQUAL',
-        '',
-        'If this is the first time you\'ve seen this Stop error screen,',
-        'restart your computer. If this screen appears again, follow',
-        'these steps:',
-        '',
-        'Check to make sure any new hardware or software is properly installed.',
-        'If this is a new installation, ask your hardware or software manufacturer',
-        'for any Windows updates you might need.',
-        '',
-        'If problems continue, disable or remove any newly installed hardware',
-        'or software. Disable BIOS memory options such as caching or shadowing.',
-        'If you need to use Safe Mode to remove or disable components, restart',
-        'your computer, press F8 to select Advanced Startup Options, and',
-        'then select Safe Mode.',
-        '',
-        'Technical information:',
-        '',
-        '*** STOP: 0x0000000A (0x00000000, 0x00000002, 0x00000001, 0x804E5BD5)',
-        '',
-        'Beginning dump of physical memory',
-        'Physical memory dump complete.',
-        'Contact your system administrator or technical support group for further',
-        'assistance.',
-    ].join('\n');
-    document.body.appendChild(bsod);
-    minesweeperLosses = 0;
-    // "Reboot" after 8 seconds
-    setTimeout(function() {
-        bsod.style.transition = 'opacity 0.4s';
-        bsod.style.opacity = '0';
-        setTimeout(function() { bsod.remove(); }, 400);
-    }, 8000);
-}
 
 // ==================== CLOCK ====================
 function updateClock() {
@@ -199,81 +113,28 @@ function getDisplayPos(item) {
 
 // ==================== ICON DIMENSIONS ====================
 function getIconDim(item) {
-  if (settings.viewMode === 'icon') { const sz = settings.iconSize; return { w: sz, h: Math.round(sz * 1.1) }; }
-  if (settings.viewMode === 'glass') return { w: settings.glassTileWidth, h: settings.glassTileHeight };
-  const w = (item && item.w) ? item.w : settings.tileWidth;
-  const h = (item && item.h) ? item.h : settings.tileHeight;
-  return { w: w, h: h + TITLEBAR_H };
+    if (settings.viewMode === 'icon') return { w: ICON_W, h: ICON_H };
+    const w = (item && item.w) ? item.w : settings.tileWidth;
+    const h = (item && item.h) ? item.h : settings.tileHeight;
+    return { w: w, h: h + TITLEBAR_H };
 }
 
 // ==================== AUTO-ARRANGE (assign positions) ====================
-// Glass grid constants
-var GLASS_MARGIN = 16, GLASS_TOP = 90;
-
-function getGlassGrid(dw, dh) {
-    var gap   = settings.glassGap || 16;
-    var cellW = settings.glassTileWidth  + gap;
-    var cellH = settings.glassTileHeight + gap;
-    var cols  = Math.max(1, Math.floor((dw - GLASS_MARGIN * 2 + gap) / cellW));
-    var startX = Math.max(GLASS_MARGIN, Math.floor((dw - cols * cellW + gap) / 2));
-    // Vertical centering
-    var startY = GLASS_TOP;
-    if (dh) {
-        var rows = Math.ceil((window._glassItemCount || 1) / cols);
-        var totalH = rows * cellH - gap;
-        var availH = dh - GLASS_TOP;
-        if (availH > totalH) startY = GLASS_TOP + Math.floor((availH - totalH) / 2);
-    }
-    return { cellW: cellW, cellH: cellH, cols: cols, startX: startX, startY: startY, gap: gap };
-}
-
-function glassPresetSize(preset) {
-    var dw = window.innerWidth, g = settings.glassGap || 16;
-    var cols = {large:3, medium:5, small:7}[preset] || 5;
-    return Math.max(70, Math.min(300, Math.floor((dw - 32 + g) / cols - g)));
-}
-
-function glassCapacity(size, gap) {
-    var g = (gap != null) ? gap : (settings.glassGap || 16);
-    var dw = window.innerWidth, dh = window.innerHeight - 40 - GLASS_TOP;
-    var cols = Math.max(1, Math.floor((dw - 32 + g) / (size + g)));
-    var rows = Math.max(1, Math.floor((dh + g) / (size + g)));
-    return { cols: cols, rows: rows, total: cols * rows };
-}
-
 function assignPositions(forceAll) {
     const GAP = 8, MARGIN = 10;
     const desktopEl = document.getElementById('desktop');
     const dw = desktopEl ? desktopEl.offsetWidth  : window.innerWidth;
     const dh = (desktopEl ? desktopEl.offsetHeight : (window.innerHeight - 44)) - GAP;
+    let x = MARGIN, y = MARGIN;
     const pk = getPosKey();
-
-    if (settings.viewMode === 'glass') {
-        window._glassItemCount = links.length;
-        var g = getGlassGrid(dw, dh);
-        var col = 0, row = 0;
-        links.forEach(function(item) {
-            if (forceAll || !item[pk]) {
-                item[pk] = {
-                    x: g.startX + col * g.cellW,
-                    y: g.startY + row * g.cellH,
-                    dw: dw, dh: dh + GAP
-                };
-            }
-            col++;
-            if (col >= g.cols) { col = 0; row++; }
-        });
-    } else {
-        let x = MARGIN, y = MARGIN;
-        links.forEach(function(item) {
-            if (forceAll || !item[pk]) {
-                item[pk] = { x: x, y: y, dw: dw, dh: dh + GAP };
-            }
-            const dim = getIconDim(item);
-            y += dim.h + GAP;
-            if (y + dim.h > dh) { y = MARGIN; x += dim.w + GAP; }
-        });
-    }
+    links.forEach(function(item) {
+        if (forceAll || !item[pk]) {
+            item[pk] = { x: x, y: y, dw: dw, dh: dh + GAP };
+        }
+        const dim = getIconDim(item);
+        y += dim.h + GAP;
+        if (y + dim.h > dh) { y = MARGIN; x += dim.w + GAP; }
+    });
 }
 
 function autoArrange() {
@@ -474,15 +335,11 @@ document.addEventListener('mouseup', function(e) {
         }
 
         if (!intoFolder) {
-            const _gg = (settings.viewMode === 'glass' && settings.glassSnap) ? getGlassGrid(dw, dh) : null;
             dd.items.forEach(function(d) {
                 let x = d.iconX + dx, y = d.iconY + dy;
                 x = Math.max(0, Math.min(x, dw - d.icon.offsetWidth));
                 y = Math.max(0, Math.min(y, dh - d.icon.offsetHeight));
-                if (_gg) {
-                    x = _gg.startX + Math.max(0, Math.round((x - _gg.startX) / _gg.cellW)) * _gg.cellW;
-                    y = _gg.startY + Math.max(0, Math.round((y - _gg.startY) / _gg.cellH)) * _gg.cellH;
-                } else if (settings.snapToGrid) { const _s1 = getSnap(); x = Math.round(x / _s1) * _s1; y = Math.round(y / _s1) * _s1; }
+                const _s1 = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _s1) * _s1; y = Math.round(y / _s1) * _s1; }
                 d.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
                 d.icon.style.left = x + 'px'; d.icon.style.top = y + 'px';
                 d.icon._wasDragged = true;
@@ -497,11 +354,7 @@ document.addEventListener('mouseup', function(e) {
     let x = dd.iconX + dx, y = dd.iconY + dy;
     x = Math.max(0, Math.min(x, dw - dd.icon.offsetWidth));
     y = Math.max(0, Math.min(y, dh - dd.icon.offsetHeight));
-    if (settings.viewMode === 'glass' && settings.glassSnap) {
-        const _gg = getGlassGrid(dw, dh);
-        x = _gg.startX + Math.max(0, Math.round((x - _gg.startX) / _gg.cellW)) * _gg.cellW;
-        y = _gg.startY + Math.max(0, Math.round((y - _gg.startY) / _gg.cellH)) * _gg.cellH;
-    } else { const _snap = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _snap) * _snap; y = Math.round(y / _snap) * _snap; } }
+    const _snap = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _snap) * _snap; y = Math.round(y / _snap) * _snap; }
 
     // check folder drop (icon + open window)
     let intoFolder = false;
@@ -558,38 +411,15 @@ document.addEventListener('mouseup', function(e) {
     }
 });
 
-// ==================== GLASS OPACITY ====================
-function applyGlassOpacity() {
-    document.documentElement.style.setProperty('--glass-opacity', settings.opacity);
-    document.documentElement.style.setProperty('--glass-tile-w', settings.glassTileWidth + 'px');
-    document.documentElement.style.setProperty('--glass-tile-h', settings.glassTileHeight + 'px');
-    const sz = settings.iconSize;
-    document.documentElement.style.setProperty('--icon-w', sz + 'px');
-    document.documentElement.style.setProperty('--icon-h', Math.round(sz * 1.1) + 'px');
-    document.documentElement.style.setProperty('--icon-img', Math.round(sz * 0.4) + 'px');
-}
-
 // ==================== BACKGROUND ====================
-var DEFAULT_BG = 'wprs/WiXP.jpg';
-
 function applyBackground() {
-    const bg = localStorage.getItem(STORAGE.bg) || DEFAULT_BG;
-    const d = document.getElementById('desktop');
-    d.style.backgroundImage = 'url(\'' + bg + '\')';
-    d.style.backgroundSize = 'cover';
-    d.style.backgroundPosition = 'center';
+    const bg = localStorage.getItem(STORAGE.bg), d = document.getElementById('desktop');
+    if (bg) { d.style.backgroundImage = 'url(\'' + bg + '\')'; d.style.backgroundSize = 'cover'; d.style.backgroundPosition = 'center'; }
+    else { d.style.backgroundImage = d.style.backgroundSize = d.style.backgroundPosition = ''; }
 }
 
 // ==================== DESKTOP RENDERING ====================
-var glassDragIndex = null; // index of tile being dragged in glass grid
-
 function renderDesktop() {
-    // Glass grid mode — completely different rendering path
-    if (settings.viewMode === 'glass') {
-        renderGlassGrid();
-        return;
-    }
-
     assignPositions(false);
 
     // Migration: items with old flat x/y/dw/dh → mode-specific posIcon/posTile
@@ -610,10 +440,6 @@ function renderDesktop() {
     const container = document.getElementById('desktop-icons');
     container.innerHTML = '';
 
-    // Hide glass wrapper if switching away
-    var gw = document.getElementById('glass-grid-wrapper');
-    if (gw) gw.style.display = 'none';
-
     links.forEach(function(item, index) {
         const icon = settings.viewMode === 'window'
             ? (item.isFolder ? createFolderIconWindow(item, index) : createLinkIconWindow(item, index))
@@ -626,10 +452,6 @@ function renderDesktop() {
     container.appendChild(createAddButton());
     SYSTEM_ICONS_DEF.forEach(function(def, i) { container.appendChild(createSystemIcon(def, i)); });
 
-    // Hide glass search bar
-    var gsb = document.getElementById('glass-search-bar');
-    if (gsb) gsb.style.display = 'none';
-
     // Re-apply minimized tile state; clean stale indices
     const staleMin = [];
     minimizedTiles.forEach(function(idx) {
@@ -638,267 +460,13 @@ function renderDesktop() {
         else staleMin.push(idx);
     });
     staleMin.forEach(function(idx) { minimizedTiles.delete(idx); });
+    // Remove stale taskbar tile buttons whose links no longer exist
     document.querySelectorAll('.taskbar-tile-btn').forEach(function(btn) {
         const idx = parseInt(btn.dataset.tileIndex);
         if (isNaN(idx) || !links[idx]) btn.remove();
     });
 
     updateSelectionUI();
-    applyGlassOpacity();
-}
-
-// ==================== GLASS GRID MODE ====================
-function applyGlassGridVars() {
-    document.documentElement.style.setProperty('--glass-cols', settings.glassCols);
-    document.documentElement.style.setProperty('--glass-tile-w', settings.glassTileWidth + 'px');
-    document.documentElement.style.setProperty('--glass-tile-h', settings.glassTileHeight + 'px');
-    document.documentElement.style.setProperty('--glass-opacity', settings.opacity);
-    document.documentElement.style.setProperty('--glass-blur', settings.glassBlur ? '12px' : '0px');
-}
-
-function renderGlassGrid() {
-    applyGlassGridVars();
-
-    // Hide desktop-icons (used by icon/window modes)
-    var iconsContainer = document.getElementById('desktop-icons');
-    if (iconsContainer) iconsContainer.innerHTML = '';
-
-    var desktop = document.getElementById('desktop');
-
-    // Create or reuse glass-grid-wrapper
-    var wrapper = document.getElementById('glass-grid-wrapper');
-    if (!wrapper) {
-        wrapper = document.createElement('div');
-        wrapper.id = 'glass-grid-wrapper';
-        desktop.appendChild(wrapper);
-    }
-    wrapper.style.display = '';
-
-    // Build search bar
-    var gsb = document.getElementById('glass-search-bar');
-    if (!gsb) {
-        gsb = document.createElement('div');
-        gsb.id = 'glass-search-bar';
-        gsb.innerHTML =
-            '<input id="gsb-input" type="text" placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0437\u0430\u043f\u0440\u043e\u0441 \u0438\u043b\u0438 \u0430\u0434\u0440\u0435\u0441..." autocomplete="off" spellcheck="false">' +
-            '<button class="gsb-btn gsb-ya">\u042f</button>' +
-            '<button class="gsb-btn gsb-go">G</button>';
-        wrapper.appendChild(gsb);
-        var inp = gsb.querySelector('#gsb-input');
-        function doSearch(engine) {
-            var q = inp.value.trim(); if (!q) return;
-            navToUrl(engine === 'ya'
-                ? 'https://yandex.ru/search/?text=' + encodeURIComponent(q)
-                : 'https://www.google.com/search?q='  + encodeURIComponent(q));
-        }
-        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch('ya'); });
-        gsb.querySelector('.gsb-ya').addEventListener('click', function() { doSearch('ya'); });
-        gsb.querySelector('.gsb-go').addEventListener('click', function() { doSearch('go'); });
-    }
-    gsb.style.display = '';
-
-    // Create or reuse grid container
-    var grid = document.getElementById('glass-grid-container');
-    if (!grid) {
-        grid = document.createElement('div');
-        grid.id = 'glass-grid-container';
-        grid.className = 'glass-grid-container';
-        wrapper.appendChild(grid);
-    }
-    grid.innerHTML = '';
-
-    // Render tiles
-    links.forEach(function(item, index) {
-        if (item.isFolder) {
-            grid.appendChild(createGlassGridFolder(item, index));
-        } else {
-            grid.appendChild(createGlassGridLink(item, index));
-        }
-    });
-
-    // Add button
-    var addBtn = document.createElement('div');
-    addBtn.className = 'glass-grid-tile glass-grid-add';
-    addBtn.innerHTML = '<span class="glass-grid-add-plus">+</span><span class="glass-grid-label">\u0421\u043e\u0437\u0434\u0430\u0442\u044c</span>';
-    addBtn.addEventListener('click', function() { openAddDialog(null); });
-    // Allow drop onto add-btn area (reorder to end)
-    addBtn.addEventListener('dragover', function(e) { e.preventDefault(); addBtn.classList.add('glass-drag-over'); });
-    addBtn.addEventListener('dragleave', function() { addBtn.classList.remove('glass-drag-over'); });
-    addBtn.addEventListener('drop', function(e) {
-        e.preventDefault(); addBtn.classList.remove('glass-drag-over');
-        if (glassDragIndex !== null) {
-            e.stopPropagation();
-            var moved = links.splice(glassDragIndex, 1)[0];
-            links.push(moved);
-            glassDragIndex = null;
-            saveAndRender();
-        }
-        // External drops bubble to #desktop handler
-    });
-    grid.appendChild(addBtn);
-}
-
-function createGlassGridLink(item, index) {
-    var favicon = item.customIcon || getFaviconUrl(item.url);
-    var el = document.createElement('a');
-    el.className = 'glass-grid-tile glass-grid-link';
-    el.href = item.url;
-    el.draggable = true;
-    el.title = item.name;
-    el.dataset.index = index;
-    el.innerHTML =
-        '<img class="glass-grid-favicon" src="' + escapeHtml(favicon) + '" alt="' + escapeHtml(item.name) + '">' +
-        '<span class="glass-grid-label">' + escapeHtml(item.name) + '</span>';
-
-    el.addEventListener('click', function(e) {
-        if (el.classList.contains('glass-dragging')) { e.preventDefault(); return; }
-        if (!/^https?:\/\//i.test(item.url)) {
-            e.preventDefault();
-            navToUrl(item.url);
-        }
-    });
-
-    el.addEventListener('contextmenu', function(e) {
-        e.preventDefault(); e.stopPropagation();
-        selectedIndices.clear(); selectedIndices.add(index);
-        showLinkIconContextMenu(e.clientX, e.clientY, index);
-    });
-
-    // Drag & drop for reorder
-    el.addEventListener('dragstart', function(e) {
-        glassDragIndex = index;
-        setTimeout(function() { el.classList.add('glass-dragging'); }, 0);
-    });
-    el.addEventListener('dragend', function() { el.classList.remove('glass-dragging'); glassDragIndex = null; });
-    el.addEventListener('dragover', function(e) { e.preventDefault(); el.classList.add('glass-drag-over'); });
-    el.addEventListener('dragleave', function() { el.classList.remove('glass-drag-over'); });
-    el.addEventListener('drop', function(e) {
-        e.preventDefault(); el.classList.remove('glass-drag-over');
-        if (glassDragIndex !== null) {
-            e.stopPropagation();
-            if (glassDragIndex === index) return;
-            var moved = links.splice(glassDragIndex, 1)[0];
-            links.splice(index, 0, moved);
-            glassDragIndex = null;
-            saveAndRender();
-        }
-        // External drops (bookmarks) bubble to #desktop handler
-    });
-
-    if (settings.glassScreenshotBg && item.screenshot) {
-        // Добавляем полупрозрачный белый слой поверх скриншота, чтобы текст был читаем
-        el.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.7), rgba(255,255,255,0.7)), url('${item.screenshot}')`;
-        el.style.backgroundSize = 'cover';
-        el.style.backgroundPosition = 'center';
-    } else {
-        // Очищаем, если опция выключена
-        el.style.backgroundImage = '';
-    }
-
-    return el;
-}
-
-function createGlassGridFolder(item, index) {
-    var el = document.createElement('div');
-    el.className = 'glass-grid-tile glass-grid-folder';
-    el.draggable = true;
-    el.dataset.index = index;
-
-    if (item.colSpan) el.style.gridColumn = 'span ' + item.colSpan;
-    if (item.rowSpan) el.style.gridRow = 'span ' + item.rowSpan;
-
-    el.innerHTML = '<div class="glass-folder-title">' + escapeHtml(item.name) + '</div>';
-    var listEl = document.createElement('div');
-    listEl.className = 'glass-folder-items';
-
-    item.items.forEach(function(child, childIdx) {
-        var a = document.createElement('a');
-        a.href = child.url;
-        a.className = 'glass-mini-link';
-        a.addEventListener('dragstart', function(e) { e.preventDefault(); e.stopPropagation(); });
-        var cfav = child.customIcon || getFaviconUrl(child.url);
-        a.innerHTML = '<img src="' + escapeHtml(cfav) + '" alt="' + escapeHtml(child.name) + '"><span>' + escapeHtml(child.name) + '</span>';
-        a.addEventListener('click', function(e) {
-            if (el.classList.contains('glass-dragging')) e.preventDefault();
-        });
-        a.addEventListener('contextmenu', function(e) {
-            e.preventDefault(); e.stopPropagation();
-            showFolderItemContextMenu(e.clientX, e.clientY, index, childIdx);
-        });
-        listEl.appendChild(a);
-    });
-    el.appendChild(listEl);
-
-    // Resize handle
-    var rh = document.createElement('div');
-    rh.className = 'glass-resize-handle';
-    rh.addEventListener('mousedown', function(e) {
-        e.preventDefault(); e.stopPropagation();
-        el.draggable = false;
-        var startX = e.clientX, startY = e.clientY;
-        var startCS = item.colSpan || 1, startRS = item.rowSpan || 1;
-        var tw = settings.glassTileWidth, th = settings.glassTileHeight, gap = 12;
-        var newCS = startCS, newRS = startRS;
-        function onM(ev) {
-            newCS = Math.max(1, startCS + Math.round((ev.clientX - startX) / (tw + gap)));
-            newRS = Math.max(1, startRS + Math.round((ev.clientY - startY) / (th + gap)));
-            el.style.gridColumn = 'span ' + newCS;
-            el.style.gridRow = 'span ' + newRS;
-        }
-        function onU() {
-            document.removeEventListener('mousemove', onM);
-            document.removeEventListener('mouseup', onU);
-            el.draggable = true;
-            if (newCS !== startCS || newRS !== startRS) {
-                item.colSpan = newCS; item.rowSpan = newRS;
-                saveAndRender();
-            }
-        }
-        document.addEventListener('mousemove', onM);
-        document.addEventListener('mouseup', onU);
-    });
-    el.appendChild(rh);
-
-    el.addEventListener('contextmenu', function(e) {
-        e.preventDefault(); e.stopPropagation();
-        selectedIndices.clear(); selectedIndices.add(index);
-        showFolderIconContextMenu(e.clientX, e.clientY, index);
-    });
-
-    // Drag reorder
-    el.addEventListener('dragstart', function() {
-        glassDragIndex = index;
-        setTimeout(function() { el.classList.add('glass-dragging'); }, 0);
-    });
-    el.addEventListener('dragend', function() { el.classList.remove('glass-dragging'); glassDragIndex = null; });
-    el.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        el.classList.add('glass-drag-over');
-    });
-    el.addEventListener('dragleave', function() { el.classList.remove('glass-drag-over'); });
-    el.addEventListener('drop', function(e) {
-        e.preventDefault(); el.classList.remove('glass-drag-over');
-        if (glassDragIndex !== null) {
-            e.stopPropagation();
-            if (glassDragIndex === index) return;
-            var draggedItem = links[glassDragIndex];
-            if (!draggedItem.isFolder) {
-                links.splice(glassDragIndex, 1);
-                item.items.push(draggedItem);
-            } else {
-                var moved = links.splice(glassDragIndex, 1)[0];
-                links.splice(index, 0, moved);
-            }
-            glassDragIndex = null;
-            saveAndRender();
-        } else {
-            // External drop (bookmark from browser) — add to this folder
-            e.stopPropagation();
-            handleLinkDrop(e, index);
-        }
-    });
-
-    return el;
 }
 
 function placeIcon(icon, item) {
@@ -956,8 +524,7 @@ function tileMaxOpen(iconEl, url) {
 function createLinkIconWindow(item, index) {
     const dim = getIconDim(item);
     const favicon  = item.customIcon || getFaviconUrl(item.url);
-    // Берем локальный скриншот. Если его пока нет, ставим фавиконку как заглушку
-    const thumbSrc = item.screenshot || favicon;
+    const thumbUrl = getThumbUrl(item.url);
 
     const icon = document.createElement('div');
     icon.className = 'desktop-icon link-icon xp-tile-window';
@@ -985,7 +552,7 @@ function createLinkIconWindow(item, index) {
     const thumb = document.createElement('img');
     thumb.className = 'icon-thumb';
     thumb.loading = 'lazy';
-    thumb.src = thumbSrc;
+    thumb.src = thumbUrl;
     thumb.alt = '';
     thumb.onerror = function() {
         tc.innerHTML = '<div class="thumb-fallback"><img src="' + escapeHtml(favicon) + '" alt=""></div>';
@@ -1751,15 +1318,13 @@ function showContextMenu(x, y, items) {
 function showDesktopContextMenu(x, y) {
     showContextMenu(x, y, [
         { label: 'Вид', icon: '\uD83D\uDC41', submenu: [
-            { label: 'Плитки (стекло)',  icon: '', check: settings.viewMode==='glass',  action: function() { settings.viewMode='glass';  localStorage.setItem(STORAGE.viewMode,'glass');  renderDesktop(); } },
-            { label: 'Окна с превью',   icon: '', check: settings.viewMode==='window', action: function() { settings.viewMode='window'; localStorage.setItem(STORAGE.viewMode,'window'); renderDesktop(); } },
-            { label: 'Ярлыки XP',       icon: '', check: settings.viewMode==='icon',   action: function() { settings.viewMode='icon';   localStorage.setItem(STORAGE.viewMode,'icon');   renderDesktop(); } },
+            { label: 'Окна с превью', icon: '', check: settings.viewMode==='window', action: function() { settings.viewMode='window'; localStorage.setItem(STORAGE.viewMode,'window'); renderDesktop(); } },
+            { label: 'Ярлыки XP',    icon: '', check: settings.viewMode==='icon',   action: function() { settings.viewMode='icon';   localStorage.setItem(STORAGE.viewMode,'icon');   renderDesktop(); } },
         ]},
         { label: 'Создать', icon: '\uD83D\uDCC4', submenu: [
             { label: 'Ярлык', icon: '\uD83D\uDD17', action: function() { openAddDialog(null); } },
             { label: 'Папку', icon: '\uD83D\uDCC1', action: function() { openAddFolderDialog(); } },
         ]},
-        { label: 'Вставить ярлык', icon: '\uD83D\uDCCB', action: function() { pasteUrl(null); } },
         'sep',
         { label: (settings.snapToGrid ? '\u2713 ' : '') + 'Выровнять по сетке', icon: '\u22EE', action: function() {
             settings.snapToGrid = !settings.snapToGrid;
@@ -1828,7 +1393,6 @@ function showLinkIconContextMenu(x, y, idx) {
         { label: 'Инкогнито',               icon: '\uD83D\uDD75\uFE0F', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url,incognito:true}); else window.open(item.url,'_blank'); } },
         'sep',
         { label: 'Изменить', icon: '\u270F\uFE0F', action: function() { openEditDialog(idx, null); } },
-        { label: 'Обновить миниатюру', icon: '📸', action: function() { requestScreenshot(item.url, item); } },
         { label: 'Удалить',  icon: '\uD83D\uDDD1\uFE0F', danger: true, action: function() { trashLink(idx); } },
     ]);
 }
@@ -1840,7 +1404,6 @@ function showFolderIconContextMenu(x, y, idx) {
         { label: 'Открыть',          icon: '\uD83D\uDCC2', action: function() { openFolder(idx); } },
         'sep',
         { label: 'Добавить ярлык',   icon: '\uD83D\uDD17', action: function() { openAddDialog(idx); } },
-        { label: 'Вставить ярлык',   icon: '\uD83D\uDCCB', action: function() { pasteUrl(idx); } },
         'sep',
         { label: 'Переименовать',    icon: '\u270F\uFE0F', action: function() { openEditDialog(idx, null); } },
         { label: 'Удалить',          icon: '\uD83D\uDDD1\uFE0F', danger: true, action: function() { trashLink(idx); } },
@@ -1940,7 +1503,6 @@ document.addEventListener('contextmenu', function(e) {
     const folderIcon = e.target.closest('.desktop-icon.folder-icon');
     const folderItem = e.target.closest('.folder-item:not(.add-item)');
     const titlebar   = e.target.closest('.xp-titlebar');
-    const folderWinEl = e.target.closest('.xp-window[id^="win-folder-"]');
     const taskbarBtn = e.target.closest('.taskbar-win-btn');
     const systray    = e.target.closest('#systray');
     const taskbar    = e.target.closest('#taskbar');
@@ -1970,13 +1532,6 @@ document.addEventListener('contextmenu', function(e) {
                 showFolderItemContextMenu(x, y, win._folderIndex, ci);
             }
         }
-    } else if (folderWinEl && !titlebar) {
-        const folderIdx = parseInt(folderWinEl.id.replace('win-folder-', ''));
-        showContextMenu(x, y, [
-            { label: 'Вставить ярлык',       icon: '\uD83D\uDCCB', action: function() { pasteUrl(folderIdx); } },
-            'sep',
-            { label: 'Добавить ярлык вручную', icon: '\uD83D\uDD17', action: function() { openAddDialog(folderIdx); } },
-        ]);
     } else if (titlebar && !titlebar.closest('.desktop-icon')) {
         const win = titlebar.closest('.xp-window');
         if (win) showWindowContextMenu(x, y, win.id.replace('win-',''));
@@ -1994,98 +1549,9 @@ document.addEventListener('contextmenu', function(e) {
 // ==================== ADD / EDIT DIALOG ====================
 let editCtx = { tileIndex: null, childIndex: null, folderIndex: null };
 function openAddDialog(folderIndex) { editCtx={tileIndex:null,childIndex:null,folderIndex:folderIndex}; showTileDialog(false,null); }
-
-function handleLinkDrop(e, folderIndex) {
-    e.preventDefault();
-    const dt = e.dataTransfer;
-    const types = Array.from(dt.types || []);
-    if (!types.includes('text/uri-list') && !types.includes('text/plain')) return;
-
-    // Extract URL — uri-list first, then plain
-    let url = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').trim().split('\n')[0].trim();
-    if (!url || /^#/.test(url)) return;
-    if (!/^https?:\/\//i.test(url)) {
-        if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) url = 'https://' + url; else return;
-    }
-
-    // Extract name from <a> title in text/html
-    let name = '';
-    const html = dt.getData('text/html') || '';
-    const m = html.match(/<a[^>]*>([^<]+)<\/a>/i);
-    if (m) name = m[1].trim();
-    if (!name) { try { name = new URL(url).hostname.replace(/^www\./, ''); } catch(_) { name = url; } }
-
-    const item = { name: name, url: url };
-    if (folderIndex !== null && folderIndex !== undefined && links[folderIndex] && links[folderIndex].isFolder) {
-        links[folderIndex].items.push(item);
-        saveLinks();
-        refreshFolderWindow(folderIndex);
-    } else {
-        links.push(item);
-        saveLinks();
-        renderDesktop();
-    }
-}
-
-async function handleFolderDrop(e, destFolderIndex) {
-    e.preventDefault();
-    const folderName = (e.dataTransfer.getData('text/plain') || '').trim();
-    if (!folderName || typeof chrome === 'undefined' || !chrome.bookmarks) return;
-    let results;
-    try { results = await chrome.bookmarks.search({ title: folderName }); } catch(_) { return; }
-    const bmFolder = results.find(function(b) { return !b.url; });
-    if (!bmFolder) return;
-    let children;
-    try { children = await chrome.bookmarks.getChildren(bmFolder.id); } catch(_) { return; }
-    const items = children.filter(function(c) { return !!c.url; }).map(function(c) { return { name: c.title, url: c.url }; });
-    if (!items.length) return;
-    if (destFolderIndex !== null && destFolderIndex !== undefined && links[destFolderIndex] && links[destFolderIndex].isFolder) {
-        items.forEach(function(it) { links[destFolderIndex].items.push(it); });
-        saveLinks(); refreshFolderWindow(destFolderIndex);
-    } else {
-        links.push({ isFolder: true, name: bmFolder.title, items: items });
-        saveLinks(); renderDesktop();
-    }
-}
-
-async function pasteUrl(folderIndex) {
-    let text;
-    try { text = await navigator.clipboard.readText(); } catch(e) { return; }
-    text = (text || '').trim();
-    if (!text) return;
-    let url = text;
-    if (!/^https?:\/\//i.test(url)) {
-        if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) url = 'https://' + url;
-        else return;
-    }
-    let name;
-    try { name = new URL(url).hostname.replace(/^www\./, ''); } catch(e) { name = url; }
-    const item = { name: name, url: url };
-    if (folderIndex !== null && folderIndex !== undefined && links[folderIndex] && links[folderIndex].isFolder) {
-        links[folderIndex].items.push(item);
-        saveLinks();
-        refreshFolderWindow(folderIndex);
-    } else {
-        links.push(item);
-        saveLinks();
-        renderDesktop();
-    }
-}
 function openAddFolderDialog() { editCtx={tileIndex:null,childIndex:null,folderIndex:null}; showTileDialog(true,null); }
 function openEditDialog(ti, ci) { editCtx={tileIndex:ti,childIndex:ci,folderIndex:null}; const item=(ci!==null)?links[ti].items[ci]:links[ti]; showTileDialog(item.isFolder,item); }
 
-async function requestScreenshot(url, targetItem) {
-    console.log('Запрос скриншота для:', url);
-    chrome.runtime.sendMessage({ action: 'capture_screenshot', url: url }, (response) => {
-        if (response && response.success) {
-            targetItem.screenshot = response.dataUrl;
-            saveAndRender();
-            console.log('Скриншот успешно получен и сохранен');
-        } else {
-            console.error('Ошибка скриншота:', response ? response.error : 'нет ответа');
-        }
-    });
-}
 function showTileDialog(isFolder, item) {
     const winId = 'tile-dialog', isEdit = item!==null;
     wmClose(winId);
@@ -2121,15 +1587,6 @@ function showTileDialog(isFolder, item) {
             if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;}
             else if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
             else links.push(newItem);
-
-            const targetIdx = (editCtx.folderIndex !== null) ? editCtx.folderIndex : (isEdit ? editCtx.tileIndex : links.length - 1);
-            const childIdxToUpdate = (editCtx.folderIndex !== null) ? (links[editCtx.folderIndex].items.length - 1) : editCtx.childIndex;
-            const finalItem = (childIdxToUpdate !== null) ? links[targetIdx].items[childIdxToUpdate] : links[targetIdx];
-
-            if (finalItem && finalItem.url) {
-                // Запускаем асинхронный процесс (он сам вызовет saveAndRender после завершения)
-                requestScreenshot(finalItem.url, finalItem);
-            }
         }
         saveAndRender(); wmClose(winId);
     });
@@ -2152,16 +1609,12 @@ function startMenuAction(a) {
     if (a === 'allprograms') { openAllPrograms(); return; }
     closeStartMenu();
     switch(a){
-        case 'search':     openSearch();      break; case 'notepad':    openNotepad();    break;
-        case 'calculator': openCalculator();  break; case 'minesweeper':openMinesweeper();break;
-        case 'solitaire':  openSolitaire();   break; case 'hearts':     openHearts();     break;
-        case 'pinball':    openPinball();     break;
-        case 'paint':      openPaint();       break; case 'wordpad':    openWordPad();    break;
-        case 'cmd':        openCmd();         break;
-        case 'settings':   openSettings();    break; case 'mycomputer': openSystemInfo(); break;
-        case 'recycle':    openRecycleBin();  break; case 'setbg':      document.getElementById('bg-upload').click(); break;
+        case 'search':     openSearch();     break; case 'notepad':    openNotepad();    break;
+        case 'calculator': openCalculator(); break; case 'minesweeper':openMinesweeper();break;
+        case 'settings':   openSettings();   break; case 'mycomputer': openSystemInfo(); break;
+        case 'recycle':    openRecycleBin(); break; case 'setbg':      document.getElementById('bg-upload').click(); break;
         case 'removebg':   localStorage.removeItem(STORAGE.bg); applyBackground(); break;
-        case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
+        case 'export':     exportData();     break; case 'import':     document.getElementById('import-upload').click(); break;
         case 'shutdown':   openShutdownDialog(); break;
     }
 }
@@ -2221,96 +1674,27 @@ function openSearch() {
 // ==================== SETTINGS ====================
 function openSettings() {
     if (wmWindows['settings']) { wmRestore('settings'); wmFocus('settings'); return; }
-    const c = document.createElement('div'); c.className = 'settings-form';
-
-    // View mode selector (always shown)
-    const vg = document.createElement('div'); vg.className = 'form-group';
-    vg.innerHTML = '<label>Режим вида: </label>';
-    const vs = document.createElement('select'); vs.style.cssText = 'margin-left:4px;font-size:11px;';
-    [['glass','Плитки (стекло)'],['window','Окна с превью'],['icon','Ярлыки XP']].forEach(function(opt) {
-        const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
-        if (settings.viewMode === opt[0]) o.selected = true;
-        vs.appendChild(o);
-    });
-    vg.appendChild(vs); c.appendChild(vg);
-
-    // Mode-specific controls container
-    const modeBlock = document.createElement('div'); modeBlock.className = 'settings-mode-block';
-    c.appendChild(modeBlock);
-
-    function mkR(label, key, min, max, sfx, step) {
-        const g = document.createElement('div'); g.className = 'form-group';
-        const l = document.createElement('label'); l.textContent = label + ': ';
-        const inp = document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max;
-        inp.step = step || 1; inp.value = settings[key];
-        const vl = document.createElement('span');
-        vl.textContent = (key === 'opacity' ? Math.round(settings[key]*100) : settings[key]) + sfx;
-        l.appendChild(inp); l.appendChild(vl); g.appendChild(l); modeBlock.appendChild(g);
-        inp.addEventListener('input', function() {
-            settings[key] = parseFloat(inp.value);
-            vl.textContent = (key === 'opacity' ? Math.round(settings[key]*100) : settings[key]) + sfx;
-            localStorage.setItem(STORAGE[key], settings[key]);
-            renderDesktop();
+    const c=document.createElement('div'); c.className='settings-form';
+    function mkR(label, key, min, max, sfx) {
+        const g=document.createElement('div'); g.className='form-group';
+        const l=document.createElement('label'); l.textContent=label+': ';
+        const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=(key==='opacity'?0.05:1); inp.value=settings[key];
+        const vl=document.createElement('span'); vl.textContent=settings[key]+sfx;
+        l.appendChild(inp); l.appendChild(vl); g.appendChild(l); c.appendChild(g);
+        inp.addEventListener('input',function(){
+            settings[key]=parseFloat(inp.value);
+            vl.textContent=(key==='opacity'?Math.round(settings[key]*100):settings[key])+sfx;
+            localStorage.setItem(STORAGE[key],settings[key]); renderDesktop();
         });
     }
-
-    function buildModeControls() {
-        modeBlock.innerHTML = '';
-        if (settings.viewMode === 'window') {
-            mkR('Ширина превью', 'tileWidth',  80, 300, 'px');
-            mkR('Высота превью', 'tileHeight', 50, 300, 'px');
-        } else if (settings.viewMode === 'glass') {
-            // Columns
-            var cg = document.createElement('div'); cg.className = 'form-group';
-            cg.innerHTML = '<label>Колонок в ряду </label>';
-            var ci = document.createElement('input'); ci.type = 'number'; ci.min = 2; ci.max = 12;
-            ci.value = settings.glassCols; ci.style.width = '50px';
-            cg.querySelector('label').appendChild(ci); modeBlock.appendChild(cg);
-            ci.addEventListener('input', function() {
-                settings.glassCols = parseInt(ci.value) || 4;
-                localStorage.setItem(STORAGE.glassCols, settings.glassCols);
-                renderDesktop();
-            });
-            mkR('Ширина плиток', 'glassTileWidth', 50, 300, 'px');
-            mkR('Высота плиток', 'glassTileHeight', 50, 300, 'px');
-            mkR('Прозрачность', 'opacity', 0.1, 1, '%', 0.05);
-            // Glass blur checkbox
-            var sBgG = document.createElement('div'); sBgG.className = 'form-group';
-            var sBgChk = document.createElement('input'); sBgChk.type = 'checkbox'; sBgChk.checked = settings.glassScreenshotBg;
-            var sBgLbl = document.createElement('label'); sBgLbl.style.cursor = 'pointer';
-            sBgLbl.appendChild(sBgChk); sBgLbl.append(' Скриншот как фон плитки');
-            sBgG.appendChild(sBgLbl); modeBlock.appendChild(sBgG);
-
-            sBgChk.addEventListener('change', function() {
-                settings.glassScreenshotBg = sBgChk.checked;
-                localStorage.setItem('edge_glass_screenshot_bg', settings.glassScreenshotBg);
-                renderDesktop();
-            });
-
-        } else if (settings.viewMode === 'icon') {
-            mkR('Размер иконок', 'iconSize', 40, 120, 'px');
-        }
-    }
-
-    buildModeControls();
-
-    vs.addEventListener('change', function() {
-        settings.viewMode = vs.value;
-        localStorage.setItem(STORAGE.viewMode, vs.value);
-        buildModeControls();
-        renderDesktop();
-    });
-
-    // Username
-    const ug = document.createElement('div'); ug.className = 'form-group'; ug.innerHTML = '<label>Имя пользователя: </label>';
-    const uI = document.createElement('input'); uI.type='text'; uI.value=username; uI.style.width='120px';
+    mkR('Ширина превью','tileWidth',80,300,'px'); mkR('Высота превью','tileHeight',50,300,'px'); mkR('Прозрачность','opacity',0,1,'%');
+    const ug=document.createElement('div'); ug.className='form-group'; ug.innerHTML='<label>Имя пользователя: </label>';
+    const uI=document.createElement('input'); uI.type='text'; uI.value=username; uI.style.width='120px';
     ug.querySelector('label').appendChild(uI); c.appendChild(ug);
-
-    const rb = document.createElement('button'); rb.className='xp-dialog-btn'; rb.textContent='Сбросить фон'; rb.style.marginTop='8px'; c.appendChild(rb);
-
-    wmCreate('settings', 'Свойства экрана', c, 360, 240, '\u2699\uFE0F');
-    uI.addEventListener('change', function() { username=uI.value.trim()||'User'; localStorage.setItem(STORAGE.username,username); const s=document.querySelector('.sm-username'); if(s)s.textContent=username; });
-    rb.addEventListener('click', function() { localStorage.removeItem(STORAGE.bg); applyBackground(); });
+    const rb=document.createElement('button'); rb.className='xp-dialog-btn'; rb.textContent='Сбросить фон'; rb.style.marginTop='8px'; c.appendChild(rb);
+    wmCreate('settings','Свойства экрана',c,360,260,'\u2699\uFE0F');
+    uI.addEventListener('change',function(){username=uI.value.trim()||'User';localStorage.setItem(STORAGE.username,username);const s=document.querySelector('.sm-username');if(s)s.textContent=username;});
+    rb.addEventListener('click',function(){localStorage.removeItem(STORAGE.bg);applyBackground();});
 }
 
 // ==================== RECYCLE BIN ====================
@@ -2412,1531 +1796,24 @@ function openCalculator() {
 // ==================== MINESWEEPER ====================
 function openMinesweeper() {
     if (wmWindows['minesweeper']) { wmRestore('minesweeper'); wmFocus('minesweeper'); return; }
-
-    const DIFFS = [
-        { label: 'Начинающий', R: 9,  C: 9,  M: 10 },
-        { label: 'Средний',    R: 16, C: 16, M: 40 },
-        { label: 'Эксперт',   R: 16, C: 30, M: 99 },
-    ];
-    let di = 0;
-    let board, rev, flag, over, won, tint, secs, first;
-
-    const c = document.createElement('div');
-    c.className = 'mines-window';
-    wmCreate('minesweeper', 'Сапёр', c, 250, 370, '\uD83D\uDCA3');
-
-    function getD() { return DIFFS[di]; }
-
-    function setCounter(n) { const e = c.querySelector('#mines-counter'); if(e) e.textContent = String(Math.max(0,n)).padStart(3,'0'); }
-    function setTimer(n)   { const e = c.querySelector('#mines-timer');   if(e) e.textContent = String(Math.min(999,n)).padStart(3,'0'); }
-
-    function nb(r, cc, R, C, fn) {
-        for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {
-            if (!dr && !dc) continue;
-            const nr=r+dr, nc=cc+dc;
-            if (nr>=0 && nr<R && nc>=0 && nc<C) fn(nr, nc);
-        }
-    }
-
-    function place(ar, ac, R, C, M) {
-        let p=0;
-        while(p<M) {
-            const r=Math.floor(Math.random()*R), cc=Math.floor(Math.random()*C);
-            if (board[r][cc]!==-1 && !(r===ar && cc===ac)) { board[r][cc]=-1; p++; }
-        }
-        for (let r=0;r<R;r++) for (let cc=0;cc<C;cc++) {
-            if (board[r][cc]===-1) continue;
-            let n=0; nb(r,cc,R,C,function(nr,nc){if(board[nr][nc]===-1)n++;});
-            board[r][cc]=n;
-        }
-    }
-
-    function reveal(r, cc, R, C) {
-        if (rev[r][cc] || flag[r][cc]) return;
-        rev[r][cc]=true;
-        if (board[r][cc]===0) nb(r,cc,R,C,function(nr,nc){reveal(nr,nc,R,C);});
-    }
-
-    function countFlags() { let f=0; flag.forEach(function(row){row.forEach(function(v){if(v)f++;})}); return f; }
-
-    function checkWin(R, C) {
-        for (let r=0;r<R;r++) for (let cc=0;cc<C;cc++) if (board[r][cc]!==-1 && !rev[r][cc]) return false;
-        return true;
-    }
-
-    function rend(R, C) {
-        const g = c.querySelector('#mines-grid'); if(!g) return;
-        g.innerHTML = '';
-        for (let r=0;r<R;r++) for (let cc=0;cc<C;cc++) {
-            const el=document.createElement('div'); el.className='mines-cell'; el.dataset.r=r; el.dataset.c=cc;
-            if (rev[r][cc]) {
-                el.classList.add('revealed');
-                if (board[r][cc]===-1) { el.classList.add('mine'); el.textContent='\uD83D\uDCA3'; }
-                else if (board[r][cc]>0) { el.textContent=board[r][cc]; el.classList.add('num-'+board[r][cc]); }
-            } else if (flag[r][cc]) { el.classList.add('flagged'); el.textContent='\uD83D\uDEA9'; }
-            g.appendChild(el);
-        }
-    }
-
-    function start() {
-        const { R, C, M } = getD();
-        clearInterval(tint); secs=0; over=false; won=false; first=true;
-        board = Array.from({length:R},function(){return Array(C).fill(0);});
-        rev   = Array.from({length:R},function(){return Array(C).fill(false);});
-        flag  = Array.from({length:R},function(){return Array(C).fill(false);});
-        setCounter(M); setTimer(0);
-        const sm = c.querySelector('#mines-smiley'); if(sm) sm.textContent='\uD83D\uDE42';
-        rend(R, C);
-    }
-
-    function buildUI() {
-        const { R, C, M } = getD();
-        const CS = 22; // cell size px
-        const gridW = C * CS + 6;
-        const winW = Math.max(240, gridW + 20);
-        const winH = 44 + 52 + R * CS + 20; // diff bar + header + grid + padding
-        const w = wmWindows['minesweeper'];
-        if (w) { w.el.style.width = winW + 'px'; w.el.style.height = winH + 'px'; }
-
-        c.innerHTML =
-            '<div class="mines-diff-bar">' +
-            DIFFS.map(function(d,i){ return '<button class="mines-diff-btn'+(i===di?' active':'')+'" data-di="'+i+'">'+d.label+'</button>'; }).join('') +
-            '</div>' +
-            '<div class="mines-header">' +
-            '<div id="mines-counter" class="mines-lcd">'+String(M).padStart(3,'0')+'</div>' +
-            '<button id="mines-smiley" class="mines-smiley">\uD83D\uDE42</button>' +
-            '<div id="mines-timer" class="mines-lcd">000</div>' +
-            '</div>' +
-            '<div class="mines-grid-wrap">' +
-            '<div id="mines-grid" class="mines-grid" style="grid-template-columns:repeat('+C+','+CS+'px)"></div>' +
-            '</div>';
-
-        c.querySelectorAll('.mines-diff-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                di = parseInt(btn.dataset.di);
-                buildUI();
-                start();
-            });
-        });
-
-        c.querySelector('#mines-smiley').addEventListener('click', function() { buildUI(); start(); });
-
-        const grid = c.querySelector('#mines-grid');
-
-        grid.addEventListener('click', function(e) {
-            const el = e.target.closest('.mines-cell'); if(!el||over||won) return;
-            const r=parseInt(el.dataset.r), cc=parseInt(el.dataset.c);
-            if (flag[r][cc] || rev[r][cc]) return;
-            if (first) { first=false; place(r,cc,R,C,M); tint=setInterval(function(){secs++;setTimer(secs);},1000); }
-            if (board[r][cc]===-1) {
-                over=true; rev[r][cc]=true; clearInterval(tint);
-                for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
-                rend(R,C); const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
-                minesweeperLosses++;
-                if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
-                return;
-            }
-            reveal(r,cc,R,C); rend(R,C);
-            if (checkWin(R,C)) { won=true; clearInterval(tint); minesweeperLosses=0; const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E'; }
-        });
-
-        // Right-click: flag (prevent browser context menu)
-        grid.addEventListener('contextmenu', function(e) {
-            e.preventDefault(); e.stopPropagation();
-            const el = e.target.closest('.mines-cell'); if(!el||over||won) return;
-            const r=parseInt(el.dataset.r), cc=parseInt(el.dataset.c);
-            if (rev[r][cc]) return;
-            flag[r][cc] = !flag[r][cc];
-            setCounter(M - countFlags());
-            rend(R, C);
-        });
-
-        // Middle-click: chord (reveal neighbors if flag count matches number)
-        grid.addEventListener('mousedown', function(e) {
-            if (e.button !== 1) return;
-            e.preventDefault();
-            const el = e.target.closest('.mines-cell'); if(!el||over||won) return;
-            const r=parseInt(el.dataset.r), cc=parseInt(el.dataset.c);
-            if (!rev[r][cc] || board[r][cc] <= 0) return;
-            let adjFlags = 0;
-            nb(r, cc, R, C, function(nr,nc){ if(flag[nr][nc]) adjFlags++; });
-            if (adjFlags !== board[r][cc]) return;
-            let boom = false;
-            nb(r, cc, R, C, function(nr,nc) {
-                if (!rev[nr][nc] && !flag[nr][nc]) {
-                    if (board[nr][nc]===-1) { boom=true; rev[nr][nc]=true; }
-                    else reveal(nr, nc, R, C);
-                }
-            });
-            if (boom) {
-                over=true; clearInterval(tint);
-                for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
-                const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
-                minesweeperLosses++;
-                if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
-            } else if (checkWin(R,C)) {
-                won=true; clearInterval(tint); minesweeperLosses=0;
-                const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E';
-            }
-            rend(R, C);
-        });
-
+    const c=document.createElement('div'); c.className='mines-window';
+    c.innerHTML='<div class="mines-header"><div id="mines-counter" class="mines-lcd">010</div><button id="mines-smiley" class="mines-smiley">\uD83D\uDE42</button><div id="mines-timer" class="mines-lcd">000</div></div><div id="mines-grid" class="mines-grid"></div>';
+    wmCreate('minesweeper','Сапёр',c,230,310,'\uD83D\uDCA3');
+    setTimeout(function(){
+        const R=9,C=9,M=10; let board,rev,flag,over,won,tint,secs,first;
+        function setC(n){const e=document.getElementById('mines-counter');if(e)e.textContent=String(Math.max(0,n)).padStart(3,'0');}
+        function setT(n){const e=document.getElementById('mines-timer');if(e)e.textContent=String(Math.min(999,n)).padStart(3,'0');}
+        function start(){clearInterval(tint);secs=0;over=false;won=false;first=true;board=Array.from({length:R},function(){return Array(C).fill(0);});rev=Array.from({length:R},function(){return Array(C).fill(false);});flag=Array.from({length:R},function(){return Array(C).fill(false);});setC(M);setT(0);const sm=document.getElementById('mines-smiley');if(sm)sm.textContent='\uD83D\uDE42';rend();}
+        function nb(r,c,fn){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const nr=r+dr,nc=c+dc;if(nr>=0&&nr<R&&nc>=0&&nc<C)fn(nr,nc);}}
+        function place(ar,ac){let p=0;while(p<M){const r=Math.floor(Math.random()*R),c=Math.floor(Math.random()*C);if(board[r][c]!==-1&&!(r===ar&&c===ac)){board[r][c]=-1;p++;}}for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(board[r][c]===-1)continue;let n=0;nb(r,c,function(nr,nc){if(board[nr][nc]===-1)n++;});board[r][c]=n;}}
+        function reveal(r,c){if(rev[r][c]||flag[r][c])return;rev[r][c]=true;if(board[r][c]===0)nb(r,c,reveal);}
+        function countF(){let f=0;flag.forEach(function(row){row.forEach(function(v){if(v)f++;});});return f;}
+        function checkW(){for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(board[r][c]!==-1&&!rev[r][c])return false;return true;}
+        function rend(){const g=document.getElementById('mines-grid');if(!g)return;g.innerHTML='';for(let r=0;r<R;r++)for(let c=0;c<C;c++){const el=document.createElement('div');el.className='mines-cell';el.dataset.r=r;el.dataset.c=c;if(rev[r][c]){el.classList.add('revealed');if(board[r][c]===-1){el.classList.add('mine');el.textContent='\uD83D\uDCA3';}else if(board[r][c]>0){el.textContent=board[r][c];el.classList.add('num-'+board[r][c]);}}else if(flag[r][c]){el.classList.add('flagged');el.textContent='\uD83D\uDEA9';}g.appendChild(el);}}
+        document.getElementById('mines-smiley').addEventListener('click',start);
+        document.getElementById('mines-grid').addEventListener('click',function(e){const el=e.target.closest('.mines-cell');if(!el||over||won)return;const r=parseInt(el.dataset.r),c=parseInt(el.dataset.c);if(flag[r][c]||rev[r][c])return;if(first){first=false;place(r,c);tint=setInterval(function(){secs++;setT(secs);},1000);}if(board[r][c]===-1){over=true;rev[r][c]=true;clearInterval(tint);for(let rr=0;rr<R;rr++)for(let cc=0;cc<C;cc++)if(board[rr][cc]===-1)rev[rr][cc]=true;rend();const sm=document.getElementById('mines-smiley');if(sm)sm.textContent='\uD83D\uDE35';return;}reveal(r,c);rend();if(checkW()){won=true;clearInterval(tint);const sm=document.getElementById('mines-smiley');if(sm)sm.textContent='\uD83D\uDE0E';}});
+        document.getElementById('mines-grid').addEventListener('contextmenu',function(e){e.stopPropagation();const el=e.target.closest('.mines-cell');if(!el||over||won)return;const r=parseInt(el.dataset.r),c=parseInt(el.dataset.c);if(rev[r][c])return;flag[r][c]=!flag[r][c];setC(M-countF());rend();});
         start();
-    }
-
-    setTimeout(function() { buildUI(); }, 0);
-}
-
-// ==================== PINBALL (SPACE CADET) ====================
-function openPinball() {
-    if (wmWindows['pinball']) { wmRestore('pinball'); wmFocus('pinball'); return; }
-    const c = document.createElement('div');
-    c.className = 'pinball-window';
-    c.innerHTML =
-        '<div class="pb-canvas-wrap"><canvas id="pb-cv" style="cursor:none"></canvas></div>' +
-        '<div class="pinball-hud">' +
-            '<div class="pb-hud-item"><div class="pb-hud-lbl">СЧЁТ</div><div id="pb-score">0</div></div>' +
-            '<div id="pb-msg">Пробел — запуск</div>' +
-            '<div class="pb-hud-item" style="display:flex;align-items:center;gap:3px;">' +
-                '<button id="pb-spd-d" class="xp-dialog-btn" style="padding:1px 5px;font-size:11px;">−</button>' +
-                '<span id="pb-spd-v" style="font-size:10px;min-width:60px;text-align:center;">Скорость 2</span>' +
-                '<button id="pb-spd-u" class="xp-dialog-btn" style="padding:1px 5px;font-size:11px;">+</button>' +
-            '</div>' +
-            '<div class="pb-hud-item"><button id="pb-restart" class="xp-dialog-btn" style="padding:2px 6px; font-size:10px;">Рестарт</button></div>' +
-            '<div class="pb-hud-item"><div class="pb-hud-lbl">МЯЧИ</div><div id="pb-balls">●●●</div></div>' +
-        '</div>';
-    wmCreate('pinball', 'Space Cadet Pinball', c, 380, 590, '⚪');
-
-    setTimeout(function() {
-        document.getElementById('pb-restart')?.addEventListener('click', function() {
-            score = 0; ballsLeft = 3; mult = 1; gameOver = false; resetBall();
-            tgA.forEach(function(t) { t.hit = false; });
-            tgB.forEach(function(t) { t.hit = false; });
-            rollovers.forEach(function(r) { r.lit = false; });
-            updateHUD();
-        });
-        document.getElementById('pb-spd-d')?.addEventListener('click', function() {
-            if (spdIdx > 0) { spdIdx--; SPDFAC = SPD_LEVELS[spdIdx]; }
-            const sv = document.getElementById('pb-spd-v');
-            if (sv) sv.textContent = 'Скорость ' + (spdIdx + 1);
-        });
-        document.getElementById('pb-spd-u')?.addEventListener('click', function() {
-            if (spdIdx < SPD_LEVELS.length - 1) { spdIdx++; SPDFAC = SPD_LEVELS[spdIdx]; }
-            const sv = document.getElementById('pb-spd-v');
-            if (sv) sv.textContent = 'Скорость ' + (spdIdx + 1);
-        });
-        const cv = document.getElementById('pb-cv');
-        if (!cv) return;
-        const ctx = cv.getContext('2d');
-
-        // ── Virtual table dimensions ──
-        const VW=320, VH=480, BR=8;
-        const WL=26, WR=254;
-        const LANE_L=254, LANE_R=294;
-        const LCX=(LANE_L+LANE_R)/2; // lane center x
-        let scale=1;
-
-        function resizeCanvas() {
-            const wrap=cv.parentElement; if(!wrap) return;
-            scale=Math.max(0.4,Math.min(wrap.clientWidth/VW,(wrap.clientHeight-2)/VH,3));
-            cv.width=Math.round(VW*scale); cv.height=Math.round(VH*scale);
-        }
-        resizeCanvas();
-        if(window.ResizeObserver){const ro=new ResizeObserver(resizeCanvas);ro.observe(cv.parentElement);}
-
-        // ── Table layout ──
-        const flippers=[
-            {x:84, y:442,len:56,ang:0.42,           openAng:-0.52,          side:1, open:false,curAng:0.42,          dAng:0},
-            {x:216,y:442,len:56,ang:Math.PI-0.42,   openAng:Math.PI+0.52,   side:-1,open:false,curAng:Math.PI-0.42,  dAng:0},
-        ];
-        const bumpers=[
-            // top arch
-            {x:130,y:90, r:19,pts:150,lit:0,col:'#ff1744'},
-            {x:165,y:72, r:22,pts:200,lit:0,col:'#d500f9'},
-            {x:200,y:90, r:19,pts:150,lit:0,col:'#ff1744'},
-            // mid sides
-            {x:86, y:152,r:15,pts:100,lit:0,col:'#ff6d00'},
-            {x:244,y:152,r:15,pts:100,lit:0,col:'#ff6d00'},
-            // center
-            {x:165,y:172,r:18,pts:175,lit:0,col:'#00e5ff'},
-            // lower cluster
-            {x:108,y:238,r:14,pts:75, lit:0,col:'#76ff03'},
-            {x:165,y:222,r:16,pts:125,lit:0,col:'#ffea00'},
-            {x:222,y:238,r:14,pts:75, lit:0,col:'#76ff03'},
-            // outer top corners
-            {x:52, y:66, r:11,pts:50, lit:0,col:'#40c4ff'},
-            {x:240,y:58, r:11,pts:50, lit:0,col:'#40c4ff'},
-        ];
-        const slings=[
-            {ax:WL, ay:292,bx:74, by:366,lit:0,kick:1 },
-            {ax:WR, ay:292,bx:214,by:366,lit:0,kick:-1},
-        ];
-        // Gutter guides (visual + physical — walls leading ball to flippers)
-        const gutters=[
-            {ax:WL, ay:358,bx:flippers[0].x-8,by:flippers[0].y},
-            {ax:WR, ay:358,bx:flippers[1].x+8,by:flippers[1].y},
-        ];
-        const rollovers=[
-            {x:62, y:44,r:7,lit:false,pts:1000,lbl:'1'},
-            {x:103,y:36,r:7,lit:false,pts:1000,lbl:'2'},
-            {x:150,y:32,r:7,lit:false,pts:1000,lbl:'3'},
-            {x:197,y:36,r:7,lit:false,pts:1000,lbl:'4'},
-        ];
-        const TW=20,TH=10;
-        let tgA=[86,110,134,158,182].map(function(x){return{x:x,y:278,hit:false};});
-        let tgB=[98,122,146,170,194].map(function(x){return{x:x,y:310,hit:false};});
-        // Spinner decoration (purely visual, rotates)
-        let spinnerAngle=0;
-
-        // ── Game state ──
-        const SPD_LEVELS=[0.3,0.55,0.7,0.85,1.0];
-        let spdIdx=1, SPDFAC=SPD_LEVELS[spdIdx];
-        let ball={x:LCX,y:380-BR,vx:0,vy:0};
-        let score=0,ballsLeft=3,gameOver=false,launched=false,inLane=false,dbg=false;
-        let springCharge=0,charging=false,leftDown=false,rightDown=false,mult=1,frameN=0;
-
-        // ── Helpers ──
-        function psd(px,py,ax,ay,bx,by){
-            const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
-            const t=l2?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l2)):0;
-            const cx=ax+t*dx,cy=ay+t*dy,ex=px-cx,ey=py-cy,d=Math.hypot(ex,ey)||0.001;
-            return{dist:d,nx:ex/d,ny:ey/d,t:t};
-        }
-        function capSpeed(){const cap=15*SPDFAC;const s=Math.hypot(ball.vx,ball.vy);if(s>cap){ball.vx*=cap/s;ball.vy*=cap/s;}}
-        function addPts(p){score+=p*mult;updateHUD();}
-        function resetBall(){ball.x=LCX;ball.y=380-BR;ball.vx=0;ball.vy=0;launched=false;inLane=false;springCharge=0;charging=false;}
-        function launch(){ball.vx=0;ball.vy=-(4+springCharge*10)*SPDFAC;launched=true;inLane=true;}
-        function flipTip(f){return{x:f.x+Math.cos(f.curAng)*f.len,y:f.y+Math.sin(f.curAng)*f.len};}
-
-        // ── Physics ──
-        function update() {
-            if (gameOver) return;
-            frameN++; spinnerAngle += 0.04;
-
-            slings.forEach(function(sl) { if (sl.lit > 0) sl.lit--; });
-            bumpers.forEach(function(b) { if (b.lit > 0) b.lit--; });
-
-            if (!launched) {
-                if (charging) springCharge = Math.min(1, springCharge + 0.022);
-                ball.x = LCX;
-                ball.y = 380 + springCharge * 24 - BR;
-                return;
-            }
-
-            // inLane: ball travels up launch lane guided by arc at top, no gravity
-            if (inLane) {
-                ball.vx *= 0.999; ball.vy *= 0.999;
-                ball.y += ball.vy;
-                if (ball.y > 78) {
-                    ball.x = LCX; ball.vx = 0;
-                } else if (ball.y > 30) {
-                    // Arc: redirect velocity from up to left (cos→0 only reached at y=18, exit before that)
-                    const t = (78 - ball.y) / 48; // 48 = 78-30, t goes 0→1 over y:78→30
-                    const spd = Math.hypot(ball.vx, ball.vy);
-                    const ang = t * (Math.PI * 0.42); // max ~75.6° — cos(75°)≈0.26, never reaches 0
-                    ball.vx = -spd * Math.sin(ang);
-                    ball.vy = -spd * Math.cos(ang);
-                    ball.x = LCX + (LANE_L - BR - 6 - LCX) * Math.sin(ang);
-                } else {
-                    // Exit inLane — ball already has leftward velocity from arc, let it fly
-                    inLane = false;
-                    if (ball.vx >= 0) {
-                        const spd = Math.hypot(ball.vx, ball.vy) || 5 * SPDFAC;
-                        ball.vx = -spd; ball.vy = 0;
-                    }
-                }
-                return;
-            }
-
-            // ── Animate flippers & compute angular velocity (once per frame) ──
-            const FLIP_SPEED = 0.38; // rad/frame (~2-3 frames for full swing)
-            flippers[0].open = leftDown;
-            flippers[1].open = rightDown;
-            flippers.forEach(function(f) {
-                const prevAng = f.curAng;
-                const target = f.open ? f.openAng : f.ang;
-                const diff = target - f.curAng;
-                f.curAng += Math.sign(diff) * Math.min(Math.abs(diff), FLIP_SPEED);
-                f.dAng = f.curAng - prevAng; // positive = opening (counterclockwise left / clockwise right)
-            });
-
-            const STEPS = 10;
-            for (let step = 0; step < STEPS; step++) {
-                ball.vy += 0.12 / STEPS;
-                ball.vx *= 0.9998; ball.vy *= 0.9998;
-                ball.x += ball.vx / STEPS; ball.y += ball.vy / STEPS;
-
-                if (ball.y - BR < 18) { ball.y = 18 + BR; ball.vy = Math.abs(ball.vy) * 0.55; }
-                if (ball.x - BR < WL) { ball.x = WL + BR; ball.vx = Math.abs(ball.vx) * 0.65; }
-                if (ball.x + BR > WR) { ball.x = WR - BR; ball.vx = -Math.abs(ball.vx) * 0.65; }
-
-                slings.forEach(function(sl) {
-                    const {dist, nx, ny} = psd(ball.x, ball.y, sl.ax, sl.ay, sl.bx, sl.by);
-                    if (dist < BR + 4) {
-                        ball.x += nx * (BR + 4 - dist); ball.y += ny * (BR + 4 - dist);
-                        const dot = ball.vx * nx + ball.vy * ny;
-                        if (dot < 0) {
-                            ball.vx = ball.vx - 2 * dot * nx;
-                            ball.vy = ball.vy - 2 * dot * ny - 4.5 * SPDFAC;
-                            ball.vy = Math.min(ball.vy, -2 * SPDFAC);
-                            // Sling always kicks toward playfield center — prevents wall-trap oscillation
-                            ball.vx = sl.kick * Math.max(Math.abs(ball.vx) + 2.8 * SPDFAC, 4.5 * SPDFAC);
-                        }
-                        sl.lit = 14; addPts(35);
-                    }
-                });
-
-                gutters.forEach(function(g) {
-                    const {dist, nx, ny} = psd(ball.x, ball.y, g.ax, g.ay, g.bx, g.by);
-                    if (dist < BR + 3) {
-                        ball.x += nx * (BR + 3 - dist); ball.y += ny * (BR + 3 - dist);
-                        const dot = ball.vx * nx + ball.vy * ny;
-                        if (dot < 0) { ball.vx -= 2 * dot * nx * 0.6; ball.vy -= 2 * dot * ny * 0.6; }
-                    }
-                });
-
-                bumpers.forEach(function(b) {
-                    const dx = ball.x - b.x, dy = ball.y - b.y, d = Math.hypot(dx, dy);
-                    if (d < b.r + BR) {
-                        const nx = dx / d, ny = dy / d;
-                        ball.x = b.x + nx * (b.r + BR + 0.5); ball.y = b.y + ny * (b.r + BR + 0.5);
-                        const spd = Math.max(Math.hypot(ball.vx, ball.vy), 5.5 * SPDFAC);
-                        ball.vx = nx * (spd + 2.5); ball.vy = ny * (spd + 2.5);
-                        b.lit = 16; addPts(b.pts);
-                    }
-                });
-
-                [tgA, tgB].forEach(function(row) {
-                    row.forEach(function(t) {
-                        if (t.hit) return;
-                        const dx = Math.max(0, Math.abs(ball.x - (t.x + TW / 2)) - TW / 2);
-                        const dy = Math.max(0, Math.abs(ball.y - (t.y + TH / 2)) - TH / 2);
-                        if (Math.hypot(dx, dy) < BR) {
-                            t.hit = true; ball.vy = -Math.abs(ball.vy) * 0.75; addPts(250);
-                            if ([...tgA, ...tgB].every(function(tt) { return tt.hit; })) {
-                                mult = Math.min(mult + 1, 5);
-                                tgA.forEach(function(tt) { tt.hit = false; });
-                                tgB.forEach(function(tt) { tt.hit = false; });
-                                addPts(15000);
-                            }
-                        }
-                    });
-                });
-
-                rollovers.forEach(function(rv) {
-                    if (!rv.lit && Math.hypot(ball.x - rv.x, ball.y - rv.y) < BR + rv.r) {
-                        rv.lit = true; addPts(rv.pts);
-                        if (rollovers.every(function(r) { return r.lit; })) {
-                            mult = Math.min(mult + 1, 5);
-                            rollovers.forEach(function(r) { r.lit = false; });
-                            addPts(25000);
-                        }
-                    }
-                });
-
-                flippers.forEach(function(f) {
-                    const tip = flipTip(f);
-                    const {dist, nx, ny, t} = psd(ball.x, ball.y, f.x, f.y, tip.x, tip.y);
-                    if (dist < BR + 5) {
-                        ball.x += nx * (BR + 5 - dist); ball.y += ny * (BR + 5 - dist);
-                        // Contact point on flipper
-                        const cx = f.x + t * (tip.x - f.x);
-                        const cy = f.y + t * (tip.y - f.y);
-                        // Flipper tip linear velocity (pixels/frame) from angular velocity
-                        const flipVx = -f.dAng * (cy - f.y);
-                        const flipVy =  f.dAng * (cx - f.x);
-                        // Relative velocity of ball w.r.t. flipper surface
-                        const relVx = ball.vx - flipVx;
-                        const relVy = ball.vy - flipVy;
-                        const dot = relVx * nx + relVy * ny;
-                        if (dot < 0) {
-                            const e = 0.72;
-                            const j = -(1 + e) * dot;
-                            ball.vx += j * nx;
-                            ball.vy += j * ny;
-                        }
-                        ball.vy = Math.min(ball.vy, -0.3);
-                    }
-                });
-                capSpeed();
-            }
-
-            // Ball caught by plunger: returned to lane (inLane backtrack or lane zone entry)
-            if (ball.vy > 0 && ball.y + BR >= 380 &&
-                (inLane || (ball.x > LANE_L - BR && ball.x < LANE_R + BR))) {
-                ball.x = LCX; ball.y = 380 - BR; ball.vx = 0; ball.vy = 0;
-                launched = false; inLane = false; springCharge = 0; charging = false;
-            }
-
-            if (ball.y > VH + 20) {
-                ballsLeft--; updateHUD();
-                if (ballsLeft <= 0) {
-                    gameOver = true;
-                    const m = document.getElementById('pb-msg');
-                    if (m) m.textContent = 'ИГРА ОКОНЧЕНА — Пробел для рестарта';
-                } else {
-                    resetBall();
-                }
-            }
-        }
-        // ── Color helpers ──
-        function hex2rgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
-        function lighten(h,f){const[r,g,b]=hex2rgb(h);return'rgb('+(r+Math.round((255-r)*f))+','+(g+Math.round((255-g)*f))+','+(b+Math.round((255-b)*f))+')';}
-        function darken(h,f){const[r,g,b]=hex2rgb(h);return'rgb('+Math.round(r*f)+','+Math.round(g*f)+','+Math.round(b*f)+')';}
-
-        // ── Draw ──
-        function draw(){
-            ctx.save();
-            ctx.scale(scale,scale);
-            ctx.clearRect(0,0,VW,VH);
-
-            // ── Background with depth gradient ──
-            const bgG=ctx.createLinearGradient(0,0,0,VH);
-            bgG.addColorStop(0,'#020110');bgG.addColorStop(0.45,'#08042a');bgG.addColorStop(1,'#0d0635');
-            ctx.fillStyle=bgG;ctx.fillRect(0,0,VW,VH);
-
-            // Perspective grid (converging lines toward top vanishing point)
-            const VP={x:VW/2,y:-60}; // vanishing point above table
-            ctx.strokeStyle='rgba(30,20,65,0.7)';ctx.lineWidth=0.5;
-            for(let x=WL;x<=LANE_L;x+=20){
-                ctx.beginPath();ctx.moveTo(x,VH);
-                ctx.lineTo(VP.x+(x-VP.x)*0.5,VP.y+(VH-VP.y)*0.5);
-                ctx.stroke();
-            }
-            for(let y=0;y<VH;y+=22){
-                const f=1-(y-VP.y)/(VH-VP.y);
-                const lx=VP.x+(WL-VP.x)*(1-f);const rx=VP.x+(LANE_L-VP.x)*(1-f);
-                ctx.beginPath();ctx.moveTo(lx,y);ctx.lineTo(rx,y);ctx.stroke();
-            }
-
-            // ── Left wall (3D bevel) ──
-            const lwG=ctx.createLinearGradient(0,0,WL,0);
-            lwG.addColorStop(0,'#0a0638');lwG.addColorStop(0.6,'#16107a');lwG.addColorStop(1,'#2520b0');
-            ctx.fillStyle=lwG;ctx.fillRect(0,0,WL,VH);
-            ctx.strokeStyle='rgba(110,90,240,0.9)';ctx.lineWidth=2;
-            ctx.beginPath();ctx.moveTo(WL,0);ctx.lineTo(WL,VH);ctx.stroke();
-            ctx.strokeStyle='rgba(200,180,255,0.25)';ctx.lineWidth=1;
-            ctx.beginPath();ctx.moveTo(WL-1,0);ctx.lineTo(WL-1,VH);ctx.stroke();
-
-            // ── Right wall ──
-            const rwG=ctx.createLinearGradient(WR,0,LANE_L,0);
-            rwG.addColorStop(0,'#2520b0');rwG.addColorStop(0.4,'#16107a');rwG.addColorStop(1,'#0a0638');
-            ctx.fillStyle=rwG;ctx.fillRect(WR,0,LANE_L-WR,VH);
-            ctx.strokeStyle='rgba(110,90,240,0.9)';ctx.lineWidth=2;
-            ctx.beginPath();ctx.moveTo(WR,0);ctx.lineTo(WR,VH);ctx.stroke();
-
-            // ── Launch lane ──
-            const laG=ctx.createLinearGradient(LANE_L,0,LANE_R,0);
-            laG.addColorStop(0,'#08052a');laG.addColorStop(1,'#04021a');
-            ctx.fillStyle=laG;ctx.fillRect(LANE_L,0,LANE_R-LANE_L,VH);
-            ctx.strokeStyle='rgba(55,45,150,0.8)';ctx.lineWidth=1.5;
-            ctx.beginPath();ctx.moveTo(LANE_L,0);ctx.lineTo(LANE_L,VH);ctx.stroke();
-            ctx.strokeStyle='rgba(40,30,100,0.5)';ctx.lineWidth=1;
-            ctx.beginPath();ctx.moveTo(LANE_R,0);ctx.lineTo(LANE_R,VH);ctx.stroke();
-
-            // Curved guide arc — connects lane top to playfield
-            ctx.strokeStyle='rgba(80,60,200,0.75)';ctx.lineWidth=2;
-            ctx.beginPath();ctx.moveTo(LANE_R,85);ctx.bezierCurveTo(LANE_R,20,255,16,210,16);ctx.stroke();
-            ctx.strokeStyle='rgba(55,40,150,0.55)';ctx.lineWidth=1.5;
-            ctx.beginPath();ctx.moveTo(LANE_L,85);ctx.bezierCurveTo(LANE_L,26,238,16,188,16);ctx.stroke();
-
-            // Lane speed-lights (animated)
-            for(let ly=36;ly<VH-50;ly+=26){
-                const on=(frameN+ly)%38<7;
-                ctx.fillStyle=on?'rgba(90,70,210,0.95)':'rgba(35,25,75,0.55)';
-                ctx.beginPath();ctx.arc(LANE_L+4,ly,2.5,0,Math.PI*2);ctx.fill();
-                ctx.beginPath();ctx.arc(LANE_R-4,ly,2.5,0,Math.PI*2);ctx.fill();
-            }
-
-            // Wall accent lights
-            for(let wy=16;wy<VH-36;wy+=30){
-                const on2=Math.floor(frameN/22)%5===Math.floor(wy/30)%5;
-                ctx.fillStyle=on2?'rgba(140,100,255,0.9)':'rgba(45,30,95,0.5)';
-                ctx.beginPath();ctx.arc(WL+4,wy,2,0,Math.PI*2);ctx.fill();
-                ctx.beginPath();ctx.arc(WR-4,wy,2,0,Math.PI*2);ctx.fill();
-            }
-
-            // ── Top decorative arcs ──
-            ctx.strokeStyle='rgba(70,50,190,0.5)';ctx.lineWidth=1.5;
-            ctx.beginPath();ctx.arc(VW/2,-10,225,0.08,Math.PI-0.08);ctx.stroke();
-            ctx.strokeStyle='rgba(110,80,255,0.25)';ctx.lineWidth=1;
-            ctx.beginPath();ctx.arc(VW/2,-10,205,0.12,Math.PI-0.12);ctx.stroke();
-
-            // ── Drain ──
-            ctx.fillStyle='rgba(0,0,0,0.88)';
-            ctx.beginPath();
-            ctx.moveTo(flippers[0].x-2,flippers[0].y+8);ctx.lineTo(flippers[1].x+2,flippers[1].y+8);
-            ctx.lineTo(flippers[1].x+2,VH);ctx.lineTo(flippers[0].x-2,VH);ctx.closePath();ctx.fill();
-
-            // ── Gutter guides ──
-            ctx.lineCap='round';
-            [[WL,358,flippers[0].x-8,flippers[0].y],[WR,358,flippers[1].x+8,flippers[1].y]].forEach(function(g){
-                ctx.strokeStyle='#10228a';ctx.lineWidth=7;
-                ctx.beginPath();ctx.moveTo(g[0],g[1]);ctx.lineTo(g[2],g[3]);ctx.stroke();
-                ctx.strokeStyle='#3858d8';ctx.lineWidth=3.5;
-                ctx.beginPath();ctx.moveTo(g[0],g[1]);ctx.lineTo(g[2],g[3]);ctx.stroke();
-                ctx.strokeStyle='rgba(170,155,255,0.3)';ctx.lineWidth=1;
-                ctx.beginPath();ctx.moveTo(g[0]+1,g[1]);ctx.lineTo(g[2]+1,g[3]);ctx.stroke();
-            });
-
-            // ── Slingshots ──
-            slings.forEach(function(sl){
-                const lit=sl.lit>0,rx=sl.kick>0?WL:WR;
-                ctx.fillStyle='rgba(0,0,0,0.4)';
-                ctx.beginPath();ctx.moveTo(sl.ax+2,sl.ay+2);ctx.lineTo(sl.bx+2,sl.by+2);ctx.lineTo(rx+2,sl.by+2);ctx.closePath();ctx.fill();
-                const sg=ctx.createLinearGradient(sl.ax,sl.ay,sl.bx,sl.by);
-                sg.addColorStop(0,lit?'#ff8820':'#2828b8');sg.addColorStop(1,lit?'#ffe030':'#1010a8');
-                ctx.fillStyle=sg;
-                ctx.beginPath();ctx.moveTo(sl.ax,sl.ay);ctx.lineTo(sl.bx,sl.by);ctx.lineTo(rx,sl.by);ctx.closePath();ctx.fill();
-                if(lit){ctx.shadowColor='#ffe060';ctx.shadowBlur=18;}
-                ctx.strokeStyle=lit?'#ffff60':'#5858e0';ctx.lineWidth=2.5;
-                ctx.beginPath();ctx.moveTo(sl.ax,sl.ay);ctx.lineTo(sl.bx,sl.by);ctx.stroke();
-                ctx.strokeStyle=lit?'rgba(255,255,200,0.9)':'rgba(110,100,245,0.4)';ctx.lineWidth=1;
-                ctx.beginPath();ctx.moveTo(sl.ax+1,sl.ay+1);ctx.lineTo(sl.bx+1,sl.by+1);ctx.stroke();
-                ctx.shadowBlur=0;
-            });
-
-            // ── Rollovers ──
-            rollovers.forEach(function(rv){
-                if(rv.lit){ctx.shadowColor='#ffe060';ctx.shadowBlur=16;}
-                ctx.fillStyle=rv.lit?'#ffe030':'#141050';
-                ctx.beginPath();ctx.arc(rv.x,rv.y,rv.r,0,Math.PI*2);ctx.fill();
-                ctx.strokeStyle=rv.lit?'#ffffa0':'#3838b0';ctx.lineWidth=1.5;
-                ctx.beginPath();ctx.arc(rv.x,rv.y,rv.r,0,Math.PI*2);ctx.stroke();
-                ctx.fillStyle=rv.lit?'#000':'rgba(200,185,255,0.9)';
-                ctx.font='bold 7px Tahoma';ctx.textAlign='center';
-                ctx.fillText(rv.lbl,rv.x,rv.y+2.5);ctx.shadowBlur=0;
-            });
-
-            // ── Targets A (pink) ──
-            tgA.forEach(function(t){
-                if(t.hit){ctx.fillStyle='rgba(15,10,45,0.7)';ctx.fillRect(t.x,t.y,TW,TH);return;}
-                ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fillRect(t.x+2,t.y+2,TW,TH);
-                const g=ctx.createLinearGradient(t.x,t.y,t.x,t.y+TH);
-                g.addColorStop(0,'#ff4080');g.addColorStop(1,'#880030');
-                ctx.fillStyle=g;ctx.fillRect(t.x,t.y,TW,TH);
-                ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillRect(t.x,t.y,TW,3);
-                ctx.strokeStyle='#ff80a8';ctx.lineWidth=0.8;ctx.strokeRect(t.x,t.y,TW,TH);
-            });
-
-            // ── Targets B (orange) ──
-            tgB.forEach(function(t){
-                if(t.hit){ctx.fillStyle='rgba(15,10,45,0.7)';ctx.fillRect(t.x,t.y,TW,TH);return;}
-                ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fillRect(t.x+2,t.y+2,TW,TH);
-                const g=ctx.createLinearGradient(t.x,t.y,t.x,t.y+TH);
-                g.addColorStop(0,'#ff7020');g.addColorStop(1,'#7a3000');
-                ctx.fillStyle=g;ctx.fillRect(t.x,t.y,TW,TH);
-                ctx.fillStyle='rgba(255,255,255,0.35)';ctx.fillRect(t.x,t.y,TW,3);
-                ctx.strokeStyle='#ffb060';ctx.lineWidth=0.8;ctx.strokeRect(t.x,t.y,TW,TH);
-            });
-
-            // ── Pop bumpers (3D raised) ──
-            bumpers.forEach(function(b){
-                const lit=b.lit>0;
-                ctx.shadowColor='rgba(0,0,0,0.65)';ctx.shadowBlur=10;ctx.shadowOffsetX=3;ctx.shadowOffsetY=5;
-                ctx.fillStyle='rgba(0,0,0,0.1)';ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
-                ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;ctx.shadowBlur=0;
-                if(lit){ctx.shadowColor=b.col;ctx.shadowBlur=30;}
-                const og=ctx.createRadialGradient(b.x,b.y,b.r*0.22,b.x,b.y,b.r);
-                og.addColorStop(0,lit?'#ffffff':lighten(b.col,0.35));
-                og.addColorStop(0.5,lit?lighten(b.col,0.55):'#120622');
-                og.addColorStop(1,'#05021a');
-                ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=og;ctx.fill();
-                ctx.strokeStyle=lit?'#fff':lighten(b.col,0.45);ctx.lineWidth=2;ctx.stroke();
-                ctx.shadowBlur=0;
-                // Ring groove
-                ctx.strokeStyle=darken(b.col,0.4);ctx.lineWidth=1.5;
-                ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.78,0,Math.PI*2);ctx.stroke();
-                // Inner dome
-                const ic=b.r*0.56;
-                const ig=ctx.createRadialGradient(b.x-ic*0.38,b.y-ic*0.38,ic*0.04,b.x,b.y,ic);
-                ig.addColorStop(0,lit?'#ffffff':lighten(b.col,0.75));
-                ig.addColorStop(0.4,lit?lighten(b.col,0.4):b.col);
-                ig.addColorStop(1,lit?b.col:darken(b.col,0.45));
-                ctx.beginPath();ctx.arc(b.x,b.y,ic,0,Math.PI*2);ctx.fillStyle=ig;ctx.fill();
-                ctx.fillStyle=lit?'#000':'rgba(255,255,255,0.95)';
-                ctx.font='bold '+(b.r<14?'6':'7')+'px Tahoma';ctx.textAlign='center';
-                ctx.fillText(b.pts,b.x,b.y+2.5);
-            });
-
-            // ── Spinning wheel decoration (center lower area) ──
-            ctx.save();
-            ctx.translate(150,338);ctx.rotate(spinnerAngle);
-            const sFlash=(frameN%20<4);
-            for(let i=0;i<8;i++){
-                const a=i*Math.PI/4;
-                ctx.strokeStyle=sFlash&&i%2===0?'rgba(180,140,255,0.85)':'rgba(65,50,145,0.45)';
-                ctx.lineWidth=1.2;
-                ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*22,Math.sin(a)*22);ctx.stroke();
-            }
-            ctx.strokeStyle=sFlash?'rgba(200,160,255,0.7)':'rgba(80,60,160,0.4)';ctx.lineWidth=1.5;
-            ctx.beginPath();ctx.arc(0,0,22,0,Math.PI*2);ctx.stroke();
-            ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.stroke();
-            ctx.fillStyle=sFlash?'rgba(170,130,255,0.8)':'rgba(55,40,120,0.6)';
-            ctx.beginPath();ctx.arc(0,0,4,0,Math.PI*2);ctx.fill();
-            ctx.restore();
-
-            // ── Flippers ──
-            flippers.forEach(function(f){
-                const tip=flipTip(f);ctx.lineCap='round';
-                ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=6;ctx.shadowOffsetX=2;ctx.shadowOffsetY=3;
-                ctx.strokeStyle='#081890';ctx.lineWidth=15;
-                ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(tip.x,tip.y);ctx.stroke();
-                ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;
-                ctx.strokeStyle=f.open?'#58b0ff':'#3870d0';ctx.lineWidth=12;
-                ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(tip.x,tip.y);ctx.stroke();
-                ctx.strokeStyle=f.open?'#98d8ff':'#76aae8';ctx.lineWidth=6;
-                ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(tip.x,tip.y);ctx.stroke();
-                ctx.strokeStyle='rgba(255,255,255,0.55)';ctx.lineWidth=2;
-                ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(tip.x,tip.y);ctx.stroke();
-                const pg=ctx.createRadialGradient(f.x-3,f.y-3,0,f.x,f.y,9);
-                pg.addColorStop(0,'#d0e8ff');pg.addColorStop(1,'#203890');
-                ctx.fillStyle=pg;ctx.beginPath();ctx.arc(f.x,f.y,9,0,Math.PI*2);ctx.fill();
-            });
-
-            // ── Plunger (always present) ──
-            const PLUNGER_Y = launched ? 380 : ball.y + BR;
-            if (!launched) {
-                // Spring coils only visible while ball rests on plunger
-                const coilStart = ball.y + BR;
-                ctx.strokeStyle='rgba(95,75,145,0.65)'; ctx.lineWidth=1.5;
-                for (let y=coilStart+8; y<VH-8; y+=7) {
-                    ctx.beginPath(); ctx.moveTo(LANE_L+5,y); ctx.lineTo(LANE_R-5,y+4); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(LANE_R-5,y+4); ctx.lineTo(LANE_L+5,y+8); ctx.stroke();
-                }
-            }
-            const pc = !launched
-                ? (springCharge>0.65?'#ff3535':springCharge>0.3?'#ffaa00':'#c0c0c0')
-                : '#4a4860';
-            ctx.fillStyle=pc; ctx.fillRect(LANE_L+4,PLUNGER_Y,LANE_R-LANE_L-8,11);
-            ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.fillRect(LANE_L+4,PLUNGER_Y,LANE_R-LANE_L-8,3);
-            ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.lineWidth=1; ctx.strokeRect(LANE_L+4,PLUNGER_Y,LANE_R-LANE_L-8,11);
-
-            // ── Multiplier ──
-            if(mult>1){
-                ctx.fillStyle='rgba(255,210,0,0.12)';ctx.fillRect(WL+2,4,72,18);
-                ctx.fillStyle='#ffd700';ctx.font='bold 8px Tahoma';ctx.textAlign='left';
-                ctx.fillText('×'+mult+' МНОЖИТЕЛЬ',WL+4,16);
-            }
-
-            // ── Ball ──
-            ctx.fillStyle='rgba(0,0,0,0.28)';
-            ctx.beginPath();ctx.ellipse(ball.x+4,ball.y+6,BR*0.85,BR*0.42,0,0,Math.PI*2);ctx.fill();
-            const bsg=ctx.createRadialGradient(ball.x-BR*0.35,ball.y-BR*0.35,BR*0.05,ball.x,ball.y,BR);
-            bsg.addColorStop(0,'#ffffff');bsg.addColorStop(0.28,'#f0f0f0');
-            bsg.addColorStop(0.62,'#a0a0a0');bsg.addColorStop(1,'#484848');
-            ctx.beginPath();ctx.arc(ball.x,ball.y,BR,0,Math.PI*2);ctx.fillStyle=bsg;ctx.fill();
-            ctx.fillStyle='rgba(255,255,255,0.72)';
-            ctx.beginPath();ctx.ellipse(ball.x-BR*0.28,ball.y-BR*0.3,BR*0.22,BR*0.14,0,0,Math.PI*2);ctx.fill();
-
-            // ── Debug overlay (press D to toggle) ──
-            if(dbg){
-                ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(2,2,160,62);
-                ctx.fillStyle='#00ff88';ctx.font='9px monospace';ctx.textAlign='left';
-                const st=inLane?'inLane':(!launched?'plunger':'play');
-                ctx.fillText('state: '+st,6,14);
-                ctx.fillText('x:'+ball.x.toFixed(1)+' y:'+ball.y.toFixed(1),6,26);
-                ctx.fillText('vx:'+ball.vx.toFixed(2)+' vy:'+ball.vy.toFixed(2),6,38);
-                ctx.fillText('spd:'+Math.hypot(ball.vx,ball.vy).toFixed(2)+' SPDFAC:'+SPDFAC,6,50);
-                ctx.fillText('WL:'+WL+' WR:'+WR+' LANE_L:'+LANE_L,6,62);
-            }
-
-            // ── Game over ──
-            if(gameOver){
-                ctx.fillStyle='rgba(3,1,18,0.82)';ctx.fillRect(0,0,VW,VH);
-                ctx.textAlign='center';
-                ctx.fillStyle='#ffd700';ctx.font='bold 20px Tahoma';ctx.fillText('ИГРА ОКОНЧЕНА',VW/2,VH/2-24);
-                ctx.fillStyle='#fff';ctx.font='13px Tahoma';ctx.fillText('Счёт: '+score.toLocaleString('ru-RU'),VW/2,VH/2+2);
-                ctx.fillStyle='#8080ff';ctx.font='10px Tahoma';ctx.fillText('Пробел — новая игра',VW/2,VH/2+22);
-            }
-            ctx.restore();
-        }
-
-        function updateHUD(){
-            const sc=document.getElementById('pb-score'),ba=document.getElementById('pb-balls'),msg=document.getElementById('pb-msg');
-            if(sc)sc.textContent=score.toLocaleString('ru-RU');
-            if(ba)ba.textContent='●'.repeat(ballsLeft)+'○'.repeat(Math.max(0,3-ballsLeft));
-            if(msg&&!gameOver)msg.textContent=mult>1?'×'+mult+' МНОЖИТЕЛЬ':'Z ← Лев.   Прав. → X';
-        }
-
-        function keyH(e,dn){
-            if(!wmWindows['pinball'])return;
-            if(e.key==='ArrowLeft'||e.key==='z'||e.key==='Z'){leftDown=dn;e.preventDefault();}
-            if(e.key==='ArrowRight'||e.key==='x'||e.key==='X'){rightDown=dn;e.preventDefault();}
-            if(dn&&(e.key==='d'||e.key==='D')){dbg=!dbg;}
-            if(dn&&e.key===' '){
-                e.preventDefault();
-                if(gameOver){
-                    score=0;ballsLeft=3;mult=1;gameOver=false;resetBall();
-                    tgA.forEach(function(t){t.hit=false;});tgB.forEach(function(t){t.hit=false;});
-                    rollovers.forEach(function(r){r.lit=false;});updateHUD();
-                }else if(!launched)charging=true;
-            }
-            if(!dn&&e.key===' '&&charging){charging=false;launch();}
-        }
-
-        function kd(e){keyH(e,true);}
-        function ku(e){keyH(e,false);}
-        document.addEventListener('keydown',kd);
-        document.addEventListener('keyup',ku);
-
-        let raf;
-        function loop(){
-            if(!wmWindows['pinball']){
-                cancelAnimationFrame(raf);
-                document.removeEventListener('keydown',kd);
-                document.removeEventListener('keyup',ku);
-                return;
-            }
-            const wrap=cv.parentElement;
-            if(wrap&&(Math.abs(wrap.clientWidth/VW-scale)>0.05||Math.abs(wrap.clientHeight/VH-scale)>0.05))resizeCanvas();
-            update();draw();
-            raf=requestAnimationFrame(loop);
-        }
-        resetBall();updateHUD();loop();
-    }, 0);
-}
-
-// ==================== SOLITAIRE (KOSYNKA / KLONDIKE) ====================
-function openSolitaire() {
-    if (wmWindows['solitaire']) { wmRestore('solitaire'); wmFocus('solitaire'); return; }
-    const c = document.createElement('div');
-    c.className = 'solitaire-window';
-    c.innerHTML = '<div class="sol-toolbar"><button id="sol-new" class="xp-dialog-btn">Новая игра</button><span id="sol-score" style="margin-left:12px;font-size:11px;color:#333">Счёт: 0</span></div><div id="sol-area" class="sol-area"></div>';
-    wmCreate('solitaire', 'Косынка', c, 700, 520, '♠');
-    setTimeout(function() { initSolitaire(); }, 0);
-}
-
-function initSolitaire() {
-    const SOL_SUITS = ['♠','♥','♦','♣'];
-    const SOL_VALS  = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-    const SOL_RED   = new Set(['♥','♦']);
-
-    let deck, tableau, foundations, stock, waste, score, dragSrc;
-
-    function newDeck() {
-        const d = [];
-        SOL_SUITS.forEach(function(s) { SOL_VALS.forEach(function(v) { d.push({s:s,v:v,face:false}); }); });
-        for (let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
-        return d;
-    }
-    function valIdx(v) { return SOL_VALS.indexOf(v); }
-    function isRed(s)  { return SOL_RED.has(s); }
-
-    function startGame() {
-        deck        = newDeck();
-        tableau     = Array.from({length:7}, function() { return []; });
-        foundations = Array.from({length:4}, function() { return []; });
-        stock = []; waste = []; score = 0;
-        for (let i=0;i<7;i++) { for (let j=i;j<7;j++) { tableau[j].push(deck.pop()); } tableau[i][i].face=true; }
-        stock = deck.splice(0); stock.forEach(function(c){c.face=false;});
-        render();
-    }
-
-    function render() {
-        const area = document.getElementById('sol-area');
-        if (!area) return;
-        area.innerHTML = '';
-        // Score
-        const sc = document.getElementById('sol-score');
-        if (sc) sc.textContent = 'Счёт: ' + score;
-
-        // Stock + Waste + Foundations row
-        const topRow = document.createElement('div');
-        topRow.className = 'sol-top-row';
-
-        // Stock
-        const stockEl = document.createElement('div');
-        stockEl.className = 'sol-stock sol-card-place';
-        stockEl.textContent = stock.length ? '🂠' : '↺';
-        stockEl.style.cursor = 'pointer';
-        stockEl.addEventListener('click', function() {
-            if (stock.length) { const c=stock.pop(); c.face=true; waste.push(c); score=Math.max(0,score-2); }
-            else { stock=waste.reverse(); waste=[]; stock.forEach(function(c){c.face=false;}); }
-            render();
-        });
-        topRow.appendChild(stockEl);
-
-        // Waste
-        const wasteEl = document.createElement('div');
-        wasteEl.className = 'sol-waste sol-card-place';
-        if (waste.length) {
-            const top = waste[waste.length-1];
-            wasteEl.appendChild(makeCard(top, true));
-            makeDraggable(wasteEl, top, 'waste', waste.length-1);
-        }
-        topRow.appendChild(wasteEl);
-
-        // Spacer
-        topRow.appendChild(document.createElement('div'));
-
-        // Foundations
-        foundations.forEach(function(f, fi) {
-            const fe = document.createElement('div');
-            fe.className = 'sol-foundation sol-card-place';
-            fe.dataset.fi = fi;
-            fe.textContent = f.length ? '' : SOL_SUITS[fi];
-            if (f.length) fe.appendChild(makeCard(f[f.length-1], true));
-            topRow.appendChild(fe);
-        });
-
-        area.appendChild(topRow);
-
-        // Tableau
-        const tabRow = document.createElement('div');
-        tabRow.className = 'sol-tab-row';
-        tableau.forEach(function(col, ci) {
-            const colEl = document.createElement('div');
-            colEl.className = 'sol-col';
-            colEl.dataset.ci = ci;
-
-            if (!col.length) {
-                const empty = document.createElement('div');
-                empty.className = 'sol-card-place sol-empty-col';
-                colEl.appendChild(empty);
-            }
-            col.forEach(function(card, ri) {
-                const cardEl = makeCard(card, card.face);
-                cardEl.style.position = 'relative';
-                cardEl.style.marginTop = ri === 0 ? '0' : '-80px';
-                if (card.face && ri < col.length) {
-                    cardEl.style.zIndex = ri + 1;
-                }
-                if (card.face) makeDraggable(cardEl, card, 'tableau', ci, ri);
-                colEl.appendChild(cardEl);
-            });
-            tabRow.appendChild(colEl);
-        });
-        area.appendChild(tabRow);
-
-        // Win check
-        if (foundations.every(function(f){return f.length===13;})) {
-            score += 500;
-            const sc = document.getElementById('sol-score');
-            if (sc) sc.textContent = 'Счёт: ' + score;
-            startWinAnimation();
-        }
-    } // закрывающая скобка render()
-
-    // --- ЛЕГЕНДАРНАЯ АНИМАЦИЯ ПОБЕДЫ ---
-    function startWinAnimation() {
-        const area = document.getElementById('sol-area');
-        if (!area) return;
-
-        const cv = document.createElement('canvas');
-        cv.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; z-index:100; cursor:pointer;';
-        cv.width = area.offsetWidth;
-        cv.height = area.offsetHeight;
-        area.appendChild(cv);
-        const ctx = cv.getContext('2d');
-
-        cv.addEventListener('click', function() {
-            cv.remove();
-            startGame();
-        });
-
-        const CW = 68, CH = 96;
-        let deckToDrop = [];
-
-        const foundationEls = area.querySelectorAll('.sol-foundation');
-        foundations.forEach(function(f, i) {
-            if (!foundationEls[i]) return;
-            const rect = foundationEls[i].getBoundingClientRect();
-            const areaRect = area.getBoundingClientRect();
-            const startX = rect.left - areaRect.left + area.scrollLeft;
-            const startY = rect.top - areaRect.top + area.scrollTop;
-            for (let j = f.length - 1; j >= 0; j--) {
-                deckToDrop.push({ card: f[j], x: startX, y: startY });
-            }
-        });
-
-        let currentCard = null;
-        let cardTimer = 0;
-
-        function drawCard(c, x, y) {
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(x, y, CW, CH);
-            ctx.strokeStyle = '#bbb';
-            ctx.strokeRect(x, y, CW, CH);
-            ctx.fillStyle = (c.s === '♥' || c.s === '♦') ? '#cc0000' : '#000';
-            ctx.font = 'bold 13px Tahoma';
-            ctx.textAlign = 'left';
-            ctx.fillText(c.v + c.s, x + 4, y + 14);
-            ctx.save();
-            ctx.translate(x + CW, y + CH);
-            ctx.rotate(Math.PI);
-            ctx.fillText(c.v + c.s, 4, 14);
-            ctx.restore();
-        }
-
-        function loop() {
-            if (!document.body.contains(cv)) return;
-
-            // Намеренно НЕ очищаем канвас — создаём шлейф как в оригинальном XP
-            if (cardTimer <= 0 && deckToDrop.length > 0) {
-                const next = deckToDrop.pop();
-                currentCard = {
-                    card: next.card,
-                    x: next.x, y: next.y,
-                    vx: (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 4 + 2),
-                    vy: Math.random() * -3 - 2
-                };
-                cardTimer = 40;
-            }
-            cardTimer--;
-
-            if (currentCard) {
-                currentCard.vy += 0.6;
-                currentCard.x += currentCard.vx;
-                currentCard.y += currentCard.vy;
-
-                if (currentCard.y + CH > cv.height) {
-                    currentCard.y = cv.height - CH;
-                    currentCard.vy = -currentCard.vy * 0.82;
-                }
-                if (currentCard.x < 0) {
-                    currentCard.x = 0; currentCard.vx = -currentCard.vx;
-                } else if (currentCard.x + CW > cv.width) {
-                    currentCard.x = cv.width - CW; currentCard.vx = -currentCard.vx;
-                }
-
-                drawCard(currentCard.card, currentCard.x, currentCard.y);
-            }
-
-            if (deckToDrop.length === 0 && cardTimer < -150) {
-                ctx.fillStyle = 'rgba(0, 107, 0, 0.9)';
-                ctx.fillRect(cv.width/2 - 110, cv.height/2 - 20, 220, 40);
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 12px Tahoma';
-                ctx.textAlign = 'center';
-                ctx.fillText('Кликните для новой игры', cv.width/2, cv.height/2 + 4);
-                return;
-            }
-
-            requestAnimationFrame(loop);
-        }
-        loop();
-    }
-
-    function makeCard(card, faceUp) {
-        const el = document.createElement('div');
-        el.className = 'sol-card' + (faceUp ? (isRed(card.s) ? ' sol-red' : ' sol-black') : ' sol-back');
-        if (faceUp) {
-            el.innerHTML = '<span class="sol-val-top">' + card.v + card.s + '</span><span class="sol-val-bot">' + card.v + card.s + '</span>';
-        }
-        return el;
-    }
-
-    function makeDraggable(el, card, src, idx, rowIdx) {
-        // Автоматический перенос в Дом по двойному клику
-        el.addEventListener('dblclick', function(e) {
-            if (e.button !== 0) return;
-            e.stopPropagation();
-            if (src === 'tableau' && rowIdx !== tableau[idx].length - 1) return; // Только нижнюю карту из колонки
-            for (let fi = 0; fi < 4; fi++) {
-                const f = foundations[fi];
-                const topCard = f.length ? f[f.length-1] : null;
-                const canPlace = (!topCard && card.v === 'A') || (topCard && topCard.s === card.s && valIdx(card.v) === valIdx(topCard.v) + 1);
-                if (canPlace) {
-                    dragSrc = { card: card, src: src, idx: idx, rowIdx: rowIdx };
-                    handleDrop('foundation', fi, 0);
-                    return;
-                }
-            }
-        });
-
-        // Кастомное визуальное перетаскивание
-        el.addEventListener('mousedown', function(e) {
-            if (e.button !== 0) return;
-            e.stopPropagation();
-
-            let moved = false;
-            const startX = e.clientX, startY = e.clientY;
-            const rect = el.getBoundingClientRect();
-            const offsetX = startX - rect.left, offsetY = startY - rect.top;
-            let ghost = null;
-
-            function onMove(ev) {
-                const dx = ev.clientX - startX, dy = ev.clientY - startY;
-                if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
-                if (!moved) {
-                    moved = true;
-                    ghost = document.createElement('div');
-                    ghost.style.cssText = 'position:fixed; pointer-events:none; z-index:10000; width:68px;';
-                    
-                    if (src === 'waste') {
-                        ghost.appendChild(makeCard(card, true));
-                        el.style.opacity = '0.3'; // Затемняем оригинал
-                    } else if (src === 'tableau') {
-                        const cardsToDrag = tableau[idx].slice(rowIdx);
-                        cardsToDrag.forEach(function(c, i) {
-                            const cEl = makeCard(c, true);
-                            cEl.style.position = 'relative';
-                            cEl.style.marginTop = i === 0 ? '0' : '-80px'; // Сохраняем отступы стопки
-                            cEl.style.zIndex = i + 1;
-                            ghost.appendChild(cEl);
-                        });
-                        // Затемняем все перетаскиваемые карты в колонке
-                        let curr = el;
-                        while(curr) { curr.style.opacity = '0.3'; curr = curr.nextElementSibling; }
-                    }
-                    document.body.appendChild(ghost);
-                }
-                if (ghost) {
-                    ghost.style.left = (ev.clientX - offsetX) + 'px';
-                    ghost.style.top = (ev.clientY - offsetY) + 'px';
-                }
-            }
-
-            function onUp(ev) {
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-                if (ghost) { ghost.remove(); ghost = null; }
-                if (!moved) return;
-
-                const target = document.elementFromPoint(ev.clientX, ev.clientY);
-                let dropTarget = target ? (target.closest('.sol-foundation') || target.closest('.sol-col')) : null;
-
-                dragSrc = { card: card, src: src, idx: idx, rowIdx: rowIdx };
-
-                let success = false;
-                if (dropTarget) {
-                    if (dropTarget.classList.contains('sol-foundation')) {
-                        success = handleDrop('foundation', parseInt(dropTarget.dataset.fi), 0);
-                    } else if (dropTarget.classList.contains('sol-col')) {
-                        success = handleDrop('tableau', parseInt(dropTarget.dataset.ci), 0);
-                    }
-                }
-                // Если не получилось сбросить в правильное место, перезапускаем рендер чтобы вернуть прозрачность (opacity) к норме
-                if (!success) render();
-            }
-
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-        });
-    }
-
-    function handleDrop(dest, destIdx, destRow) {
-        if (!dragSrc) return false;
-        const { card, src, idx, rowIdx } = dragSrc;
-        dragSrc = null;
-
-        if (dest === 'foundation') {
-            const f = foundations[destIdx];
-            const topCard = f.length ? f[f.length-1] : null;
-            const canPlace = (!topCard && card.v === 'A') ||
-                (topCard && topCard.s === card.s && valIdx(card.v) === valIdx(topCard.v) + 1);
-            if (!canPlace) return false;
-            // Only allow single card drops to foundation
-            if (src === 'waste') { waste.pop(); f.push(card); score += 10; }
-            else if (src === 'tableau') {
-                if (rowIdx !== tableau[idx].length - 1) return false;
-                tableau[idx].pop(); f.push(card); score += 10;
-                if (tableau[idx].length && !tableau[idx][tableau[idx].length-1].face) { tableau[idx][tableau[idx].length-1].face=true; score+=5; }
-            }
-        } else if (dest === 'tableau') {
-            const col = tableau[destIdx];
-            const topCard = col.length ? col[col.length-1] : null;
-            const canPlace = (!topCard && card.v === 'K') ||
-                (topCard && topCard.face && isRed(topCard.s) !== isRed(card.s) && valIdx(topCard.v) === valIdx(card.v) + 1);
-            if (!canPlace) return false;
-            if (src === 'waste') { waste.pop(); col.push(card); score+=5; }
-            else if (src === 'tableau') {
-                // Move card and all face-up cards below it
-                const movingCards = tableau[idx].slice(rowIdx);
-                tableau[idx] = tableau[idx].slice(0, rowIdx);
-                movingCards.forEach(function(mc) { col.push(mc); });
-                score += 3;
-                if (tableau[idx].length && !tableau[idx][tableau[idx].length-1].face) { tableau[idx][tableau[idx].length-1].face=true; score+=5; }
-            }
-        }
-        render();
-        return true;
-    }
-
-    const newBtn = document.getElementById('sol-new');
-    if (newBtn) newBtn.addEventListener('click', startGame);
-    startGame();
-}
-
-// ==================== HEARTS ====================
-function openHearts() {
-    if (wmWindows['hearts']) { wmRestore('hearts'); wmFocus('hearts'); return; }
-    const c = document.createElement('div');
-    c.className = 'hearts-window';
-    c.innerHTML = '<div id="hearts-status" style="padding:6px 10px;font-size:11px;background:#c0d8c0;border-bottom:1px solid #8a8">Ваш ход. Разыграйте карту.</div><div id="hearts-table" class="hearts-table"></div><div id="hearts-hand" class="hearts-hand"></div><div style="padding:4px 8px;background:#e8f0e8;border-top:1px solid #cdc;display:flex;gap:16px" id="hearts-scores"></div>';
-    wmCreate('hearts', 'Червы', c, 620, 480, '♥');
-    setTimeout(initHearts, 0);
-}
-
-function initHearts() {
-    const SUITS=['♠','♥','♦','♣'], VALS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-    function vi(v){return VALS.indexOf(v);}
-    function isHeart(c){return c.s==='♥';}
-    function isQS(c){return c.s==='♠'&&c.v==='Q';}
-    function points(c){return isHeart(c)?1:isQS(c)?13:0;}
-
-    let hands, trick, trickLead, trickSuit, scores, heartsBroken, trickCards, names, status;
-    names = ['Вы','Бот 1','Бот 2','Бот 3'];
-
-    function newGame() {
-        let deck=[];
-        SUITS.forEach(function(s){VALS.forEach(function(v){deck.push({s:s,v:v});});});
-        for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}
-        hands=[deck.slice(0,13),deck.slice(13,26),deck.slice(26,39),deck.slice(39,52)];
-        scores=[0,0,0,0]; trick=0; heartsBroken=false; trickCards=null;
-        // Find who has 2♣
-        trickLead=hands.findIndex(function(h){return h.some(function(c){return c.s==='♣'&&c.v==='2';});});
-        trickSuit=null; status='';
-        renderHearts();
-        setTimeout(continueHearts, 300);
-    }
-
-    function continueHearts() {
-        if (!wmWindows['hearts']) return;
-        // Bots play first if not player's turn
-        while (trickLead !== 0 && trickCards && trickCards.length < 4) {
-            botPlay(trickLead);
-        }
-        renderHearts();
-        if (trickCards && trickCards.length === 4) {
-            setTimeout(resolveTrick, 800);
-        }
-    }
-
-    function botPlay(p) {
-        if (!trickCards) trickCards = [];
-        let hand = hands[p];
-        let card;
-        if (trickCards.length === 0) {
-            // Lead: play lowest non-heart if possible
-            const safe = hand.filter(function(c){return !isHeart(c)&&!isQS(c);});
-            card = safe.length ? safe.reduce(function(a,b){return vi(a.v)<vi(b.v)?a:b;}) : hand[0];
-            trickSuit = card.s;
-        } else {
-            const follow = hand.filter(function(c){return c.s===trickSuit;});
-            if (follow.length) {
-                card = follow.reduce(function(a,b){return vi(a.v)<vi(b.v)?a:b;});
-            } else {
-                // Dump points if possible
-                const pts = hand.filter(function(c){return points(c)>0;});
-                card = pts.length ? pts[0] : hand[0];
-            }
-        }
-        hands[p] = hand.filter(function(c){return c!==card;});
-        trickCards.push({player:p, card:card});
-        if (isHeart(card)||isQS(card)) heartsBroken=true;
-        // Next player
-        trickLead = (trickLead+1)%4;
-    }
-
-    function playerPlay(card) {
-        if (!trickCards) trickCards = [];
-        const hand = hands[0];
-        // Validate: must follow suit
-        if (trickCards.length > 0) {
-            const hasSuit = hand.some(function(c){return c.s===trickSuit;});
-            if (hasSuit && card.s !== trickSuit) { setStatus('Нужно ходить в масть '+trickSuit+'!'); return; }
-        } else {
-            trickSuit = card.s;
-            // Can't lead hearts unless broken
-            if (isHeart(card) && !heartsBroken) {
-                const hasNonHeart = hand.some(function(c){return !isHeart(c);});
-                if (hasNonHeart) { setStatus('Червы ещё не разбиты!'); return; }
-            }
-        }
-        if (isHeart(card)||isQS(card)) heartsBroken=true;
-        hands[0] = hand.filter(function(c){return c!==card;});
-        trickCards.push({player:0, card:card});
-        trickLead = (trickLead+1)%4;
-        renderHearts();
-        setTimeout(function(){
-            if (!wmWindows['hearts']) return;
-            while (trickCards.length < 4) { botPlay(trickLead); }
-            renderHearts();
-            setTimeout(resolveTrick, 700);
-        }, 200);
-    }
-
-    function resolveTrick() {
-        if (!trickCards || !wmWindows['hearts']) return;
-        // Find winner: highest card of lead suit
-        let winner = trickCards[0];
-        trickCards.forEach(function(tc) {
-            if (tc.card.s === trickCards[0].card.s && vi(tc.card.v) > vi(winner.card.v)) winner = tc;
-        });
-        // Award points
-        trickCards.forEach(function(tc){scores[winner.player]+=points(tc.card);});
-        trick++;
-        trickCards = null;
-        trickLead = winner.player;
-        trickSuit = null;
-        setStatus(names[winner.player]+' берёт взятку.');
-
-        // Check end of round
-        if (hands[0].length === 0) {
-            // Check shoot the moon
-            const shootIdx = scores.findIndex(function(s,i){return s===26;});
-            if (shootIdx >= 0) {
-                scores = scores.map(function(s,i){return i===shootIdx?0:s+26;});
-                setStatus(names[shootIdx]+' взял все штрафы! +26 всем остальным.');
-            }
-            renderHearts();
-            setTimeout(function(){
-                const msg = names.map(function(n,i){return n+': '+scores[i];}).join('\n');
-                if (confirm('Раунд окончен!\n'+msg+'\nСыграть ещё?')) newGame();
-            }, 500);
-            return;
-        }
-        renderHearts();
-        if (trickLead !== 0) setTimeout(function(){
-            if (!wmWindows['hearts']) return;
-            botPlay(trickLead); trickLead=(trickLead+1)%4;
-            if (trickCards.length<4) { /* player's turn */ } else { setTimeout(resolveTrick,700); }
-            renderHearts();
-        }, 600);
-    }
-
-    function setStatus(msg) {
-        status = msg;
-        const el = document.getElementById('hearts-status');
-        if (el) el.textContent = msg;
-    }
-
-    function renderHearts() {
-        if (!wmWindows['hearts']) return;
-        const table = document.getElementById('hearts-table');
-        const handEl = document.getElementById('hearts-hand');
-        const scEl = document.getElementById('hearts-scores');
-        if (!table||!handEl||!scEl) return;
-
-        // Table: show trick cards
-        table.innerHTML = '';
-        if (trickCards && trickCards.length) {
-            trickCards.forEach(function(tc) {
-                const pos = ['bottom','left','top','right'][tc.player];
-                const cd = document.createElement('div');
-                cd.className='hearts-trick-card hearts-card '+(tc.card.s==='♥'||tc.card.s==='♦'?'hearts-red':'hearts-black');
-                cd.style.gridArea=pos;
-                cd.textContent=tc.card.v+tc.card.s;
-                table.appendChild(cd);
-            });
-        }
-        // Bot hand sizes
-        [1,2,3].forEach(function(p){
-            const pc=document.createElement('div');
-            pc.className='hearts-bot-count';
-            pc.style.gridArea=['left','top','right'][p-1];
-            pc.textContent=names[p]+': '+hands[p].length+' карт';
-            table.appendChild(pc);
-        });
-
-        // Player hand
-        handEl.innerHTML='';
-        const myHand = hands[0];
-        myHand.sort(function(a,b){if(a.s!==b.s)return SUITS.indexOf(a.s)-SUITS.indexOf(b.s);return vi(a.v)-vi(b.v);});
-        myHand.forEach(function(card) {
-            const cd=document.createElement('div');
-            cd.className='hearts-card '+(isHeart(card)||card.s==='♦'?'hearts-red':'hearts-black');
-            cd.textContent=card.v+card.s;
-            cd.style.cursor=(trickLead===0||trickCards===null)?'pointer':'default';
-            if (trickLead===0||trickCards===null) {
-                cd.addEventListener('click',function(){playerPlay(card);});
-            }
-            handEl.appendChild(cd);
-        });
-
-        // Scores
-        scEl.innerHTML=names.map(function(n,i){return '<span>'+n+': <b>'+scores[i]+'</b></span>';}).join('');
-    }
-
-    newGame();
-}
-
-// ==================== MS PAINT ====================
-function openPaint() {
-    if (wmWindows['paint']) { wmRestore('paint'); wmFocus('paint'); return; }
-    const c = document.createElement('div');
-    c.className = 'paint-window';
-    c.innerHTML = '<div class="paint-toolbar"><div class="paint-tools"><button class="paint-tool active" data-tool="pencil" title="Карандаш">✏️</button><button class="paint-tool" data-tool="fill" title="Заливка">🪣</button><button class="paint-tool" data-tool="eraser" title="Ластик">🧹</button><button class="paint-tool" data-tool="rect" title="Прямоугольник">▭</button><button class="paint-tool" data-tool="circle" title="Эллипс">⬭</button><button class="paint-tool" data-tool="line" title="Линия">/</button><button class="paint-tool" data-tool="text" title="Текст">A</button></div><div class="paint-colors" id="paint-colors"></div><div class="paint-size-wrap"><label style="font-size:10px">Размер: <input type="range" id="paint-size" min="1" max="30" value="3"></label></div><button class="xp-dialog-btn" id="paint-clear" style="font-size:10px">Очистить</button><button class="xp-dialog-btn" id="paint-save" style="font-size:10px">Сохранить PNG</button></div><div class="paint-canvas-wrap"><canvas id="paint-canvas" width="680" height="420"></canvas></div>';
-    wmCreate('paint', 'Paint', c, 720, 540, '🎨');
-    setTimeout(function() {
-        const canvas = document.getElementById('paint-canvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-
-        let tool='pencil', color='#000000', size=3, drawing=false, startX, startY, snapshot;
-
-        const COLORS=['#000000','#7f7f7f','#880000','#ff0000','#ff7f00','#ffff00','#00a500','#00ff00','#003080','#0000ff','#4b0082','#8f00ff','#ff69b4','#ffffff','#c0c0c0','#d2691e'];
-        const colorWrap = document.getElementById('paint-colors');
-        COLORS.forEach(function(col) {
-            const sw = document.createElement('div');
-            sw.className = 'paint-swatch' + (col===color?' active':'');
-            sw.style.background = col;
-            sw.addEventListener('click', function() {
-                color=col; document.querySelectorAll('.paint-swatch').forEach(function(s){s.classList.remove('active');});
-                sw.classList.add('active');
-            });
-            colorWrap.appendChild(sw);
-        });
-        // Color picker
-        const cp = document.createElement('input'); cp.type='color'; cp.value=color; cp.style.cssText='width:22px;height:22px;padding:0;border:1px solid #999;cursor:pointer;';
-        cp.addEventListener('input', function(){color=cp.value;});
-        colorWrap.appendChild(cp);
-
-        document.querySelectorAll('.paint-tool').forEach(function(btn){
-            btn.addEventListener('click',function(){
-                document.querySelectorAll('.paint-tool').forEach(function(b){b.classList.remove('active');});
-                btn.classList.add('active'); tool=btn.dataset.tool;
-            });
-        });
-
-        const sizeInp=document.getElementById('paint-size');
-        if(sizeInp)sizeInp.addEventListener('input',function(){size=parseInt(sizeInp.value);});
-
-        document.getElementById('paint-clear').addEventListener('click',function(){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);});
-        document.getElementById('paint-save').addEventListener('click',function(){const a=document.createElement('a');a.href=canvas.toDataURL();a.download='paint.png';a.click();});
-
-        function getPos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
-
-        function floodFill(x,y,fillColor){
-            const idata=ctx.getImageData(0,0,canvas.width,canvas.height);
-            const data=idata.data;
-            const w=canvas.width,h=canvas.height;
-            const px=(Math.round(y)*w+Math.round(x))*4;
-            const or=data[px],og=data[px+1],ob=data[px+2],oa=data[px+3];
-            const fr=parseInt(fillColor.slice(1,3),16),fg=parseInt(fillColor.slice(3,5),16),fb=parseInt(fillColor.slice(5,7),16);
-            if(or===fr&&og===fg&&ob===fb)return;
-            const stack=[[Math.round(x),Math.round(y)]];
-            function set(sx,sy){const i=(sy*w+sx)*4;data[i]=fr;data[i+1]=fg;data[i+2]=fb;data[i+3]=255;}
-            function match(sx,sy){const i=(sy*w+sx)*4;return data[i]===or&&data[i+1]===og&&data[i+2]===ob&&data[i+3]===oa;}
-            while(stack.length){const[cx,cy]=stack.pop();if(cx<0||cy<0||cx>=w||cy>=h)continue;if(!match(cx,cy))continue;set(cx,cy);stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);}
-            ctx.putImageData(idata,0,0);
-        }
-
-        canvas.addEventListener('mousedown',function(e){
-            const p=getPos(e); drawing=true; startX=p.x; startY=p.y;
-            if(tool==='fill'){floodFill(p.x,p.y,color);return;}
-            if(tool==='text'){const t=prompt('Текст:');if(t){ctx.font=(size*5)+'px Arial';ctx.fillStyle=color;ctx.fillText(t,p.x,p.y);}return;}
-            snapshot=ctx.getImageData(0,0,canvas.width,canvas.height);
-            if(tool==='pencil'||tool==='eraser'){ctx.beginPath();ctx.moveTo(p.x,p.y);}
-        });
-        canvas.addEventListener('mousemove',function(e){
-            if(!drawing)return;
-            const p=getPos(e);
-            if(tool==='pencil'){ctx.strokeStyle=color;ctx.lineWidth=size;ctx.lineCap='round';ctx.lineTo(p.x,p.y);ctx.stroke();}
-            else if(tool==='eraser'){ctx.strokeStyle='#fff';ctx.lineWidth=size*3;ctx.lineCap='round';ctx.lineTo(p.x,p.y);ctx.stroke();}
-            else if(tool==='rect'||tool==='circle'||tool==='line'){
-                ctx.putImageData(snapshot,0,0);
-                ctx.strokeStyle=color;ctx.lineWidth=size;
-                if(tool==='rect'){ctx.strokeRect(startX,startY,p.x-startX,p.y-startY);}
-                else if(tool==='circle'){ctx.beginPath();ctx.ellipse(startX+(p.x-startX)/2,startY+(p.y-startY)/2,Math.abs(p.x-startX)/2,Math.abs(p.y-startY)/2,0,0,Math.PI*2);ctx.stroke();}
-                else if(tool==='line'){ctx.beginPath();ctx.moveTo(startX,startY);ctx.lineTo(p.x,p.y);ctx.stroke();}
-            }
-        });
-        canvas.addEventListener('mouseup',function(){drawing=false;snapshot=null;});
-        canvas.addEventListener('mouseleave',function(){drawing=false;});
-    }, 0);
-}
-
-// ==================== WORDPAD ====================
-function openWordPad() {
-    if (wmWindows['wordpad']) { wmRestore('wordpad'); wmFocus('wordpad'); return; }
-    const c = document.createElement('div');
-    c.className = 'wordpad-window';
-    c.innerHTML = '<div class="wordpad-toolbar"><select id="wp-font" style="font-size:11px;width:100px"><option>Arial</option><option>Times New Roman</option><option>Courier New</option><option>Georgia</option><option>Verdana</option></select><select id="wp-size" style="font-size:11px;width:50px"><option>10</option><option>12</option><option selected>14</option><option>18</option><option>24</option><option>36</option></select><button class="wp-btn" data-cmd="bold" title="Жирный"><b>B</b></button><button class="wp-btn" data-cmd="italic" title="Курсив"><i>I</i></button><button class="wp-btn" data-cmd="underline" title="Подчеркнуть"><u>U</u></button><span style="width:8px;display:inline-block"></span><button class="wp-btn" data-cmd="justifyLeft" title="По левому краю">&#9776;</button><button class="wp-btn" data-cmd="justifyCenter" title="По центру">&#9783;</button><button class="wp-btn" data-cmd="justifyRight" title="По правому краю">&#9777;</button><span style="width:8px;display:inline-block"></span><input type="color" id="wp-color" value="#000000" style="width:22px;height:22px;padding:0;border:1px solid #999;cursor:pointer" title="Цвет текста"><button class="xp-dialog-btn" id="wp-save" style="font-size:10px;margin-left:4px">Сохранить</button><button class="xp-dialog-btn" id="wp-load" style="font-size:10px">Загрузить</button></div><div class="wordpad-ruler"><div style="flex:1;height:2px;background:linear-gradient(90deg,#aaa 0,#aaa 1px,transparent 0) 0 0/8px 2px repeat-x"></div></div><div id="wp-editor" class="wordpad-editor" contenteditable="true" spellcheck="false"></div>';
-    wmCreate('wordpad','WordPad',c,640,480,'📝');
-    setTimeout(function(){
-        const editor=document.getElementById('wp-editor');
-        const fontSel=document.getElementById('wp-font');
-        const sizeSel=document.getElementById('wp-size');
-        const colorInp=document.getElementById('wp-color');
-        if(!editor)return;
-        editor.style.fontFamily='Arial';
-        editor.style.fontSize='14px';
-        const saved=localStorage.getItem('edge_wordpad_content');
-        if(saved)editor.innerHTML=saved;
-
-        document.querySelectorAll('.wp-btn').forEach(function(btn){
-            btn.addEventListener('mousedown',function(e){e.preventDefault();document.execCommand(btn.dataset.cmd,false,null);editor.focus();});
-        });
-        fontSel.addEventListener('change',function(){document.execCommand('fontName',false,fontSel.value);editor.focus();});
-        sizeSel.addEventListener('change',function(){document.execCommand('fontSize',false,'3');
-            editor.querySelectorAll('font[size="3"]').forEach(function(el){el.removeAttribute('size');el.style.fontSize=sizeSel.value+'px';});
-            editor.focus();
-        });
-        colorInp.addEventListener('input',function(){document.execCommand('foreColor',false,colorInp.value);editor.focus();});
-        document.getElementById('wp-save').addEventListener('click',function(){localStorage.setItem('edge_wordpad_content',editor.innerHTML);});
-        document.getElementById('wp-load').addEventListener('click',function(){const s=localStorage.getItem('edge_wordpad_content');if(s)editor.innerHTML=s;});
-    },0);
-}
-
-// ==================== CMD.EXE ====================
-function openCmd() {
-    if (wmWindows['cmd']) { wmRestore('cmd'); wmFocus('cmd'); return; }
-    const c = document.createElement('div');
-    c.className = 'cmd-window';
-    c.innerHTML = '<div id="cmd-output" class="cmd-output"></div><div class="cmd-input-row"><span class="cmd-prompt">C:\\></span><input id="cmd-input" class="cmd-input" type="text" autocomplete="off" spellcheck="false"></div>';
-    wmCreate('cmd','Командная строка',c,560,380,'⬛');
-    setTimeout(function(){
-        const out=document.getElementById('cmd-output');
-        const inp=document.getElementById('cmd-input');
-        if(!out||!inp)return;
-        let cwd='C:\\Users\\User';
-        const env={PATH:'C:\\Windows\\System32',WINDIR:'C:\\Windows',USERNAME:'User',OS:'Windows_NT'};
-        let history=[], histIdx=-1;
-
-        function print(text,cls){const l=document.createElement('div');if(cls)l.className=cls;l.textContent=text;out.appendChild(l);out.scrollTop=out.scrollHeight;}
-
-        print('Microsoft Windows XP [Версия 5.1.2600]','cmd-header');
-        print('(C) Корпорация Майкрософт, 1985-2001.','cmd-header');
-        print('');
-
-        const COMMANDS = {
-            help: function(){['cls - очистить экран','dir - список файлов','echo [текст] - вывести текст','cd [путь] - сменить каталог','set - переменные среды','ver - версия Windows','color - цвет текста','time - текущее время','date - текущая дата','title [заголовок] - заголовок окна','ping [хост] - пинг','ipconfig - сетевые настройки','tasklist - список задач','taskkill - завершить задачу','chkdsk - проверка диска','format - форматировать диск','shutdown - завершение работы','exit - закрыть окно'].forEach(function(l){print(l);});},
-            ver: function(){print('Microsoft Windows XP [Версия 5.1.2600]');},
-            cls: function(){out.innerHTML='';},
-            dir: function(){['  Volume in drive C is SYSTEM','  Volume Serial Number is DEAD-BEEF','','Directory of '+cwd,'','[.]   [..]   Program Files   Windows   Users','','               5 File(s)    0 bytes','               2 Dir(s)  80,523,321,344 bytes free'].forEach(function(l){print(l);});},
-            cd: function(args){if(!args||args==='..'){cwd=cwd.split('\\').slice(0,-1).join('\\')||'C:\\';return;}cwd=cwd+'\\'+args;},
-            echo: function(args){print(args||'');},
-            time: function(){print('Текущее время: '+new Date().toLocaleTimeString('ru-RU'));},
-            date: function(){print('Текущая дата: '+new Date().toLocaleDateString('ru-RU'));},
-            set: function(args){if(!args){Object.keys(env).forEach(function(k){print(k+'='+env[k]);});}else{const parts=args.split('=');const k=parts[0];const v=parts.slice(1).join('=');if(v.length)env[k]=v;else print(env[k]||args+' не является внутренней или внешней');}},
-            color: function(){print('Цвет изменён (это просто эмуляция).');},
-            title: function(args){const w=wmWindows['cmd'];if(w)w.el.querySelector('.xp-titlebar-title').textContent=args||'Командная строка';},
-            ping: function(args){const h=args||'ya.ru';print('Обмен пакетами с '+h+' [77.88.55.66]:');[1,2,3,4].forEach(function(i){setTimeout(function(){print('Ответ от 77.88.55.66: число байт=32 время='+(20+Math.round(Math.random()*30))+'мс TTL=55');},i*400);});},
-            ipconfig: function(){['Windows IP Configuration','','Ethernet adapter Local Area Connection:','   Connection-specific DNS Suffix: local','   IP Address. . . . . . . . . : 192.168.1.'+Math.floor(Math.random()*200+2),'   Subnet Mask . . . . . . . . : 255.255.255.0','   Default Gateway . . . . . . : 192.168.1.1'].forEach(function(l){print(l);});},
-            tasklist: function(){['Image Name      PID Session Name  Mem Usage','============  ===== ============ ==========','System Idle P.    0 Console       28 K','System            4 Console      216 K','explorer.exe    888 Console   18,452 K','iexplore.exe   1024 Console   32,768 K','notepad.exe    1337 Console    4,096 K'].forEach(function(l){print(l);});},
-            taskkill: function(){print('УСПЕХ: процесс завершён.');},
-            chkdsk: function(){['Тип файловой системы: NTFS','Серийный номер тома: 3A2F-87D1','CHKDSK проверяет файлы (этап 1 из 3)...','  100 percent of file verification complete.','CHKDSK проверяет индексы (этап 2 из 3)...','  100 percent completed.','CHKDSK проверяет дескрипторы безопасности (этап 3 из 3)...','Windows проверила файловую систему и не обнаружила проблем.','  20,971,520 КБ всего места на диске.','  11,534,336 КБ занято.','   9,437,184 КБ свободно.'].forEach(function(l){print(l);});},
-            format: function(){print('Предупреждение: все данные будут потеряны!');print('Нажмите Y для продолжения или N для отмены...');setTimeout(function(){print('Форматирование... Ладно, пожалею ваши данные. :)');},1000);},
-            shutdown: function(){openShutdownDialog();},
-            exit: function(){wmClose('cmd');},
-            tree: function(){['C:\\','├── Windows','│   ├── System32','│   └── SysWOW64','├── Program Files','│   ├── Internet Explorer','│   └── Windows Media Player','└── Users','    └── User','        ├── Desktop','        ├── Documents','        └── Downloads'].forEach(function(l){print(l);});},
-            systeminfo: function(){['Имя узла:   USER-PC','ОС:         Microsoft Windows XP Professional','Версия ОС:  5.1.2600 Service Pack 3 Build 2600','ОС (доп.):  Standalone Workstation','ОЗУ:        1024 МБ','Пр. память: '+Math.floor(Math.random()*400+200)+' МБ'].forEach(function(l){print(l);}); },
-            crash: function(){print('Инициирован критический сбой системы...'); setTimeout(triggerBSOD, 800);}
-        };
-
-        function prompt2(){return cwd+'>';}
-
-        inp.addEventListener('keydown',function(e){
-            if(e.key==='Enter'){
-                const line=inp.value;
-                print(prompt2()+line);
-                if(line.trim()){history.unshift(line);histIdx=-1;}
-                inp.value='';
-                const parts=line.trim().toLowerCase().split(' ');
-                const cmd=parts[0];
-                const arg=parts.slice(1).join(' ');
-                if(cmd===''){return;}
-                if(COMMANDS[cmd]){COMMANDS[cmd](arg);}
-                else if(cmd){print("'"+cmd+"' не является внутренней или внешней командой","cmd-error");print("исполняемой программой или пакетным файлом.","cmd-error");}
-            }else if(e.key==='ArrowUp'){histIdx=Math.min(histIdx+1,history.length-1);inp.value=history[histIdx]||'';}
-            else if(e.key==='ArrowDown'){histIdx=Math.max(histIdx-1,-1);inp.value=history[histIdx]||'';}
-        });
-        setTimeout(function(){inp.focus();},100);
     },0);
 }
 
@@ -3955,110 +1832,6 @@ document.getElementById('bg-upload').addEventListener('change',function(e){
     const r=new FileReader();r.onload=function(ev){localStorage.setItem(STORAGE.bg,ev.target.result);applyBackground();};r.readAsDataURL(file);e.target.value='';
 });
 
-// ==================== SCREENSAVER ====================
-let ssTimer = null, ssActive = false, ssEl = null;
-const SS_DELAY = 5 * 60 * 1000; // 5 minutes idle
-
-function resetScreensaver() {
-    if (ssActive) stopScreensaver();
-    clearTimeout(ssTimer);
-    ssTimer = setTimeout(startScreensaver, SS_DELAY);
-}
-
-function startScreensaver() {
-    if (ssActive) return;
-    ssActive = true;
-    ssEl = document.createElement('div');
-    ssEl.id = 'screensaver';
-    ssEl.style.cssText = 'position:fixed;inset:0;background:#000;z-index:99999;cursor:none;overflow:hidden;';
-
-    // Animated pipes screensaver
-    const cv = document.createElement('canvas');
-    cv.style.cssText = 'width:100%;height:100%;';
-    cv.width = window.innerWidth;
-    cv.height = window.innerHeight;
-    ssEl.appendChild(cv);
-    document.body.appendChild(ssEl);
-
-    const ctx = cv.getContext('2d');
-    const PIPE_COLORS = ['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#ff8800'];
-    const CELL = 20;
-    const cols = Math.floor(cv.width / CELL);
-    const rows = Math.floor(cv.height / CELL);
-
-    let pipes = [];
-    function newPipe() {
-        return {
-            x: Math.floor(Math.random()*cols),
-            y: Math.floor(Math.random()*rows),
-            dir: Math.floor(Math.random()*4), // 0=right,1=down,2=left,3=up
-            color: PIPE_COLORS[Math.floor(Math.random()*PIPE_COLORS.length)],
-            len: 0
-        };
-    }
-
-    for (let i=0;i<6;i++) pipes.push(newPipe());
-
-    function drawPipeSegment(p, fromX, fromY) {
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = CELL * 0.55;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(fromX*CELL+CELL/2, fromY*CELL+CELL/2);
-        ctx.lineTo(p.x*CELL+CELL/2, p.y*CELL+CELL/2);
-        ctx.stroke();
-        // Joint ball
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(fromX*CELL+CELL/2, fromY*CELL+CELL/2, CELL*0.3, 0, Math.PI*2);
-        ctx.fill();
-    }
-
-    let frame = 0;
-    const ssInterval = setInterval(function() {
-        if (!ssActive) { clearInterval(ssInterval); return; }
-        frame++;
-        if (frame % 2 !== 0) return; // slow down
-
-        pipes.forEach(function(p) {
-            const ox = p.x, oy = p.y;
-            const DX=[1,0,-1,0][p.dir], DY=[0,1,0,-1][p.dir];
-            const nx=p.x+DX, ny=p.y+DY;
-            if (nx<0||ny<0||nx>=cols||ny>=rows||p.len>60) {
-                // Reset pipe
-                const np = newPipe(); p.x=np.x;p.y=np.y;p.dir=np.dir;p.color=np.color;p.len=0; return;
-            }
-            // Maybe turn
-            if (Math.random()<0.15) p.dir=(p.dir+[-1,1][Math.floor(Math.random()*2)]+4)%4;
-            drawPipeSegment(p, ox, oy);
-            p.x=p.x+DX; p.y=p.y+DY; p.len++;
-        });
-
-        // XP text
-        ctx.fillStyle='rgba(255,255,255,0.08)';
-        ctx.font='bold 48px Arial';
-        ctx.textAlign='center';
-        ctx.fillText('Windows XP', cv.width/2, cv.height/2);
-    }, 50);
-
-    ssEl._interval = ssInterval;
-    ssEl.addEventListener('mousemove', stopScreensaver);
-    ssEl.addEventListener('keydown', stopScreensaver);
-    ssEl.addEventListener('click', stopScreensaver);
-}
-
-function stopScreensaver() {
-    if (!ssActive) return;
-    ssActive = false;
-    if (ssEl) {
-        if (ssEl._interval) clearInterval(ssEl._interval);
-        ssEl.remove();
-        ssEl = null;
-    }
-    resetScreensaver();
-}
-
 // ==================== GLOBAL CLICK / KEY LISTENERS ====================
 document.getElementById('start-btn').addEventListener('click', function(e) { e.stopPropagation(); toggleStartMenu(); });
 document.querySelectorAll('.sm-item').forEach(function(el) { el.addEventListener('click', function() { startMenuAction(el.dataset.action); }); });
@@ -4067,100 +1840,7 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('#context-menu')) hideContextMenu();
     if (!e.target.closest('#start-menu') && !e.target.closest('#start-btn')) closeStartMenu();
 });
-function showDeleteConfirm(msg, onConfirm) {
-    const winId = 'delete-confirm';
-    wmClose(winId);
-    const c = document.createElement('div');
-    c.style.cssText = 'padding:18px;display:flex;flex-direction:column;gap:14px;background:white;';
-    const msgEl = document.createElement('div');
-    msgEl.style.cssText = 'font-size:12px;color:#333;';
-    msgEl.textContent = msg;
-    const bd = document.createElement('div');
-    bd.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
-    const ok = document.createElement('button'); ok.className = 'xp-dialog-btn xp-dialog-btn-primary'; ok.textContent = 'Да';
-    const cn = document.createElement('button'); cn.className = 'xp-dialog-btn'; cn.textContent = 'Нет';
-    bd.appendChild(ok); bd.appendChild(cn); c.appendChild(msgEl); c.appendChild(bd);
-    wmCreate(winId, 'Подтверждение удаления', c, 320, 130, '\uD83D\uDDD1\uFE0F');
-    ok.addEventListener('click', function() { wmClose(winId); onConfirm(); });
-    cn.addEventListener('click', function() { wmClose(winId); });
-}
-
-function deleteSelectedIcons() {
-    if (!selectedIndices.size) return;
-    const indices = Array.from(selectedIndices);
-    const folderCount = indices.filter(function(i) { return links[i] && links[i].isFolder; }).length;
-    const linkCount   = indices.length - folderCount;
-    function doDelete() {
-        indices.sort(function(a,b){return b-a;}).forEach(function(i){ trashLink(i); });
-        clearSelection(); renderDesktop();
-    }
-    if (folderCount > 0) {
-        let msg = 'Удалить в корзину: ';
-        if (folderCount) msg += folderCount + ' папк' + (folderCount === 1 ? 'у' : 'и');
-        if (folderCount && linkCount) msg += ' и ';
-        if (linkCount)   msg += linkCount   + ' ярлык' + (linkCount   === 1 ? '' : 'а');
-        msg += '?';
-        showDeleteConfirm(msg, doDelete);
-    } else {
-        doDelete();
-    }
-}
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { hideContextMenu(); closeStartMenu(); }
-    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
-        const tag = document.activeElement && document.activeElement.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
-        e.preventDefault();
-        let folderIdx = null;
-        if (activeWindowId && activeWindowId.startsWith('folder-')) {
-            folderIdx = parseInt(activeWindowId.replace('folder-', ''));
-        }
-        pasteUrl(folderIdx);
-    }
-    if (e.key === 'Delete') {
-        const tag = document.activeElement && document.activeElement.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
-        deleteSelectedIcons();
-    }
-});
-
-// ==================== BOOKMARK DRAG & DROP ====================
-(function() {
-    function canAccept(dt) {
-        const t = Array.from(dt.types || []);
-        return t.includes('text/uri-list') || (t.includes('text/plain') && !t.includes('Files'));
-    }
-    function dispatch(e, folderIndex) {
-        if (e.target.closest('.desktop-icon')) return;
-        e.preventDefault();
-        const types = Array.from(e.dataTransfer.types || []);
-        if (types.includes('text/uri-list')) {
-            handleLinkDrop(e, folderIndex);
-        } else if (types.includes('text/plain')) {
-            const text = (e.dataTransfer.getData('text/plain') || '').trim();
-            if (/^https?:\/\//i.test(text) || /^[\w.-]+\.[a-z]{2,}/i.test(text)) handleLinkDrop(e, folderIndex);
-            else if (text) handleFolderDrop(e, folderIndex);
-        }
-    }
-    const desk = document.getElementById('desktop');
-    desk.addEventListener('dragover', function(e) {
-        if (e.target.closest('.desktop-icon') || !canAccept(e.dataTransfer)) return;
-        e.preventDefault(); e.dataTransfer.dropEffect = 'link';
-    });
-    desk.addEventListener('drop', function(e) { dispatch(e, null); });
-    document.addEventListener('dragover', function(e) {
-        const fc = e.target.closest('.folder-window-content');
-        if (!fc || !canAccept(e.dataTransfer)) return;
-        e.preventDefault(); e.dataTransfer.dropEffect = 'link';
-    });
-    document.addEventListener('drop', function(e) {
-        const fc = e.target.closest('.folder-window-content');
-        if (!fc) return;
-        const win = fc.closest('.xp-window[id^="win-folder-"]');
-        if (win) dispatch(e, parseInt(win.id.replace('win-folder-', '')));
-    });
-}());
+document.addEventListener('keydown', function(e) { if (e.key==='Escape') { hideContextMenu(); closeStartMenu(); } });
 
 // ==================== RESPONSIVE RESIZE ====================
 let resizeTimer = null;
@@ -4178,22 +1858,6 @@ document.addEventListener('DOMContentLoaded', function() {
     renderDesktop();
     updateClock();
     setInterval(updateClock, 1000);
-
-    // 5 быстрых кликов по часам = BSOD
-    let clockClicks = 0, clockTimer = null;
-    const trayTime = document.getElementById('tray-time');
-    if (trayTime) {
-        trayTime.style.cursor = 'default';
-        trayTime.addEventListener('click', function() {
-            clockClicks++;
-            clearTimeout(clockTimer);
-            if (clockClicks >= 5) { clockClicks = 0; triggerBSOD(); return; }
-            clockTimer = setTimeout(function() { clockClicks = 0; }, 1000);
-        });
-    }
-    // Screensaver
-    ['mousemove','mousedown','keydown','wheel'].forEach(function(ev){document.addEventListener(ev,resetScreensaver);});
-    resetScreensaver();
     const smBack = document.querySelector('.sm-back-btn');
     if (smBack) smBack.addEventListener('click', function() {
         document.getElementById('sm-all-programs').classList.add('hidden');
