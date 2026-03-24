@@ -2074,17 +2074,25 @@ async function pasteUrl(folderIndex) {
 function openAddFolderDialog() { editCtx={tileIndex:null,childIndex:null,folderIndex:null}; showTileDialog(true,null); }
 function openEditDialog(ti, ci) { editCtx={tileIndex:ti,childIndex:ci,folderIndex:null}; const item=(ci!==null)?links[ti].items[ci]:links[ti]; showTileDialog(item.isFolder,item); }
 
-async function requestScreenshot(url, targetItem) {
+function requestScreenshot(url, targetItem) {
     console.log('Запрос скриншота для:', url);
-    chrome.runtime.sendMessage({ action: 'capture_screenshot', url: url }, (response) => {
-        if (response && response.success) {
-            targetItem.screenshot = response.dataUrl;
-            saveAndRender();
-            console.log('Скриншот успешно получен и сохранен');
-        } else {
-            console.error('Ошибка скриншота:', response ? response.error : 'нет ответа');
-        }
-    });
+    try {
+        chrome.runtime.sendMessage({ action: 'capture_screenshot', url: url }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error('Ошибка связи с background:', chrome.runtime.lastError.message);
+                return;
+            }
+            if (response && response.success) {
+                targetItem.screenshot = response.dataUrl;
+                saveAndRender();
+                console.log('Скриншот успешно получен и сохранен');
+            } else {
+                console.error('Ошибка скриншота:', response ? response.error : 'нет ответа');
+            }
+        });
+    } catch (e) {
+        console.error('Не удалось отправить запрос скриншота:', e);
+    }
 }
 function showTileDialog(isFolder, item) {
     const winId = 'tile-dialog', isEdit = item!==null;
@@ -2117,17 +2125,24 @@ function showTileDialog(isFolder, item) {
             let url=ui?ui.value.trim():''; if(!url)return;
             if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
             const ci_=ii?ii.value.trim():'';
-            const newItem={name:name,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
-            if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;}
-            else if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
-            else links.push(newItem);
+            if(isEdit){
+                const oldItem=(editCtx.childIndex!==null)?links[editCtx.tileIndex].items[editCtx.childIndex]:links[editCtx.tileIndex];
+                const newItem=Object.assign({},oldItem,{name:name,url:url});
+                if(ci_) newItem.customIcon=ci_; else delete newItem.customIcon;
+                if(oldItem && oldItem.url !== url) delete newItem.screenshot;
+                if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;
+            } else {
+                const newItem={name:name,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
+                if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
+                else links.push(newItem);
+            }
 
             const targetIdx = (editCtx.folderIndex !== null) ? editCtx.folderIndex : (isEdit ? editCtx.tileIndex : links.length - 1);
             const childIdxToUpdate = (editCtx.folderIndex !== null) ? (links[editCtx.folderIndex].items.length - 1) : editCtx.childIndex;
             const finalItem = (childIdxToUpdate !== null) ? links[targetIdx].items[childIdxToUpdate] : links[targetIdx];
 
-            if (finalItem && finalItem.url) {
-                // Запускаем асинхронный процесс (он сам вызовет saveAndRender после завершения)
+            if (finalItem && finalItem.url && !finalItem.screenshot) {
+                // Запускаем захват скриншота только если его ещё нет (новый элемент или URL изменился)
                 requestScreenshot(finalItem.url, finalItem);
             }
         }

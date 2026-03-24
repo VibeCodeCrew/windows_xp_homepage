@@ -20,6 +20,32 @@ async function captureTab(url, sendResponse) {
 
         const targetTabId = win.tabs[0].id;
 
+        let captureStarted = false;
+        async function doCapture() {
+            if (captureStarted) return;
+            captureStarted = true;
+            try {
+                // Ждем 2.5 секунды, чтобы тяжелые сайты (SPA) точно отрендерились
+                await new Promise(resolve => setTimeout(resolve, 2500));
+
+                // Переносим окно в видимую зону, чтобы заставить Chrome отрисовать страницу
+                await chrome.windows.update(win.id, { left: 0, top: 0, focused: true });
+                await new Promise(resolve => setTimeout(resolve, 500)); // Даем время на рендеринг
+
+                const dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 50 });
+
+                // Сжимаем картинку
+                const compressedBase64 = await resizeImage(dataUrl, 300, 218);
+
+                // Убираем следы
+                chrome.windows.remove(win.id).catch(() => {});
+                sendResponse({ success: true, dataUrl: compressedBase64 });
+            } catch (e) {
+                chrome.windows.remove(win.id).catch(() => {});
+                sendResponse({ success: false, error: e.message });
+            }
+        }
+
         // Предохранитель: если страница грузится слишком долго (более 15 секунд)
         const fallbackTimer = setTimeout(() => {
             chrome.tabs.onUpdated.removeListener(onUpdated);
@@ -29,36 +55,23 @@ async function captureTab(url, sendResponse) {
             } catch (e) {} // Игнорируем ошибку, если порт уже закрыт
         }, 15000);
 
-        const onUpdated = async (tabId, info) => {
+        const onUpdated = (tabId, info) => {
             if (tabId === targetTabId && info.status === 'complete') {
                 chrome.tabs.onUpdated.removeListener(onUpdated);
-                clearTimeout(fallbackTimer); // Отменяем предохранитель, если загрузились вовремя
-                
-                // Ждем 2.5 секунды, чтобы тяжелые сайты (SPA) точно отрендерились
-                setTimeout(async () => {
-                    try {
-                        // ВОТ РЕШЕНИЕ ПРОБЛЕМЫ:
-                        // Переносим окно в видимую зону на долю секунды, чтобы заставить Chrome отрисовать страницу
-                        await chrome.windows.update(win.id, { left: 0, top: 0, focused: false });
-                        await new Promise(resolve => setTimeout(resolve, 300)); // Даем видеокарте 300мс на рендеринг пикселей
-
-                        const dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 50 });
-                        
-                        // Сжимаем картинку
-                        const compressedBase64 = await resizeImage(dataUrl, 300, 218);
-                        
-                        // Убираем следы
-                        chrome.windows.remove(win.id).catch(() => {});
-                        sendResponse({ success: true, dataUrl: compressedBase64 });
-                    } catch (e) {
-                        chrome.windows.remove(win.id).catch(() => {});
-                        sendResponse({ success: false, error: e.message });
-                    }
-                }, 2500); 
+                clearTimeout(fallbackTimer);
+                doCapture();
             }
         };
 
         chrome.tabs.onUpdated.addListener(onUpdated);
+
+        // Проверяем, не загрузилась ли страница ДО регистрации слушателя (race condition fix)
+        const tab = await chrome.tabs.get(targetTabId);
+        if (tab.status === 'complete') {
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            clearTimeout(fallbackTimer);
+            doCapture();
+        }
     } catch (e) {
         sendResponse({ success: false, error: e.message });
     }
