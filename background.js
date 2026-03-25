@@ -3,7 +3,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         captureTab(message.url, sendResponse);
         return true;
     }
+    if (message.action === 'fetch_page_title') {
+        fetchPageTitle(message.url, sendResponse);
+        return true;
+    }
 });
+
+async function fetchPageTitle(url, sendResponse) {
+    try {
+        const resp = await fetch(url, { headers: { 'Accept': 'text/html' } });
+        if (!resp.ok) { sendResponse({ success: false }); return; }
+        const html = await resp.text();
+        const match = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
+        if (!match) { sendResponse({ success: false }); return; }
+        const title = match[1].trim()
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n));
+        sendResponse({ success: true, title });
+    } catch (e) {
+        sendResponse({ success: false });
+    }
+}
 
 // Проверяем, можно ли вообще делать скриншот/fetch для данного URL
 function isCapturableUrl(url) {

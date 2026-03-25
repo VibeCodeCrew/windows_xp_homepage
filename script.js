@@ -2151,50 +2151,128 @@ function showTileDialog(isFolder, item) {
     wmClose(winId);
     const c = document.createElement('div'); c.className = 'dialog-form';
     const ng = document.createElement('div'); ng.className = 'form-group'; ng.innerHTML = '<label>Название:</label>';
-    const ni = document.createElement('input'); ni.type='text'; ni.value=item?item.name:''; ni.placeholder='Название';
+    const ni = document.createElement('input'); ni.type='text'; ni.value=item?item.name:'';
+    ni.placeholder = isFolder ? 'Название' : 'Оставьте пустым — возьмём с сайта';
     ng.appendChild(ni); c.appendChild(ng);
-    let ui=null, ii=null;
+
+    let ui=null, ii=null, acEl=null;
+    // Единственное определение acHide — работает даже если acEl=null
+    let acItems=[], acFocused=-1;
+    function acHide() { if(acEl){acEl.style.display='none';} acItems=[]; acFocused=-1; }
+
     if (!isFolder) {
-        const ug=document.createElement('div'); ug.className='form-group'; ug.innerHTML='<label>Ссылка:</label>';
+        const ug=document.createElement('div'); ug.className='form-group';
+        ug.innerHTML='<label>Ссылка:</label>';
         ui=document.createElement('input'); ui.type='text'; ui.value=(item&&item.url)?item.url:''; ui.placeholder='https://...';
         ug.appendChild(ui); c.appendChild(ug);
+
+        // --- URL autocomplete dropdown ---
+        acEl = document.createElement('div');
+        acEl.className = 'xp-url-autocomplete';
+        acEl.style.display = 'none';
+        document.body.appendChild(acEl);
+
+        function acPosition() {
+            const r = ui.getBoundingClientRect();
+            acEl.style.left  = r.left + 'px';
+            acEl.style.top   = r.bottom + 'px';
+            acEl.style.width = r.width + 'px';
+        }
+        function acRender(results) {
+            acEl.innerHTML = '';
+            acItems = results;
+            acFocused = -1;
+            results.forEach(function(h) {
+                const row = document.createElement('div');
+                row.className = 'xp-url-ac-item';
+                const img = document.createElement('img');
+                img.src = 'chrome-extension://' + chrome.runtime.id + '/_favicon/?pageUrl=' + encodeURIComponent(h.url) + '&size=16';
+                img.onerror = function() { img.style.visibility='hidden'; };
+                const span = document.createElement('span');
+                span.textContent = h.title ? h.title + ' \u2014 ' + h.url : h.url;
+                row.appendChild(img); row.appendChild(span);
+                row.addEventListener('mousedown', function(e) {
+                    e.preventDefault(); ui.value = h.url; acHide(); ui.focus();
+                });
+                acEl.appendChild(row);
+            });
+            if (results.length > 0) { acPosition(); acEl.style.display='block'; }
+            else acHide();
+        }
+        function acSetFocus(idx) {
+            const rows = acEl.querySelectorAll('.xp-url-ac-item');
+            rows.forEach(function(r){ r.classList.remove('ac-focused'); });
+            acFocused = Math.max(0, Math.min(idx, acItems.length-1));
+            if (rows[acFocused]) rows[acFocused].classList.add('ac-focused');
+        }
+        ui.addEventListener('input', function() {
+            const q = ui.value.trim();
+            if (!q) { acHide(); return; }
+            chrome.history.search({ text: q, maxResults: 8, startTime: 0 }, function(r) { acRender(r||[]); });
+        });
+        ui.addEventListener('keydown', function(e) {
+            if (!acEl || acEl.style.display==='none') return;
+            if (e.key==='ArrowDown') { e.preventDefault(); acSetFocus(acFocused<0?0:acFocused+1); }
+            else if (e.key==='ArrowUp') { e.preventDefault(); acSetFocus(acFocused<=0?0:acFocused-1); }
+            else if (e.key==='Enter' && acFocused>=0) { e.stopPropagation(); ui.value=acItems[acFocused].url; acHide(); }
+            else if (e.key==='Escape') { acHide(); }
+        });
+        ui.addEventListener('blur', function() { setTimeout(acHide, 150); });
+        ui.addEventListener('focus', function() { if(ui.value.trim()) ui.dispatchEvent(new Event('input')); });
+
         const ig=document.createElement('div'); ig.className='form-group'; ig.innerHTML='<label>Иконка (URL, необязательно):</label>';
         ii=document.createElement('input'); ii.type='text'; ii.value=(item&&item.customIcon)?item.customIcon:''; ii.placeholder='URL иконки';
         ig.appendChild(ii); c.appendChild(ig);
     }
+
     const bd=document.createElement('div'); bd.className='dialog-btns';
     const sv=document.createElement('button'); sv.className='xp-dialog-btn xp-dialog-btn-primary'; sv.textContent='OK';
     const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
     bd.appendChild(sv); bd.appendChild(cn); c.appendChild(bd);
-    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:235, isFolder?'\uD83D\uDCC1':'\uD83D\uDD17');
+    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:250, isFolder?'\uD83D\uDCC1':'\uD83D\uDD17');
     setTimeout(function(){ni.focus();},50);
-    sv.addEventListener('click',function(){
-        const name=ni.value.trim(); if(!name)return;
+
+    function doSave(resolvedName) {
         if(isFolder){
-            if(isEdit){links[editCtx.tileIndex].name=name; const fw=wmWindows['folder-'+editCtx.tileIndex]; if(fw)fw.el.querySelector('.xp-titlebar-title').textContent=name;}
-            else links.push({isFolder:true,name:name,items:[],x:undefined,y:undefined});
+            if(isEdit){links[editCtx.tileIndex].name=resolvedName; const fw=wmWindows['folder-'+editCtx.tileIndex]; if(fw)fw.el.querySelector('.xp-titlebar-title').textContent=resolvedName;}
+            else links.push({isFolder:true,name:resolvedName,items:[],x:undefined,y:undefined});
         } else {
             let url=ui?ui.value.trim():''; if(!url)return;
             if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
             const ci_=ii?ii.value.trim():'';
-            const newItem={name:name,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
+            const newItem={name:resolvedName,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
             if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;}
             else if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
             else links.push(newItem);
-
-            const targetIdx = (editCtx.folderIndex !== null) ? editCtx.folderIndex : (isEdit ? editCtx.tileIndex : links.length - 1);
-            const childIdxToUpdate = (editCtx.folderIndex !== null) ? (links[editCtx.folderIndex].items.length - 1) : editCtx.childIndex;
-            const finalItem = (childIdxToUpdate !== null) ? links[targetIdx].items[childIdxToUpdate] : links[targetIdx];
-
-            if (finalItem && finalItem.url) {
-                // Запускаем асинхронный процесс (он сам вызовет saveAndRender после завершения)
-                requestScreenshot(finalItem.url, finalItem);
-            }
+            const targetIdx=(editCtx.folderIndex!==null)?editCtx.folderIndex:(isEdit?editCtx.tileIndex:links.length-1);
+            const childIdxToUpdate=(editCtx.folderIndex!==null)?(links[editCtx.folderIndex].items.length-1):editCtx.childIndex;
+            const finalItem=(childIdxToUpdate!==null)?links[targetIdx].items[childIdxToUpdate]:links[targetIdx];
+            if(finalItem&&finalItem.url) requestScreenshot(finalItem.url, finalItem);
         }
         saveAndRender(); wmClose(winId);
+    }
+
+    sv.addEventListener('click', function() {
+        acHide();
+        const name = ni.value.trim();
+        if (isFolder) { if(!name)return; doSave(name); return; }
+        let url = ui ? ui.value.trim() : ''; if(!url)return;
+        if (name) { doSave(name); return; }
+        // Имя пустое — тянем заголовок с сайта
+        const fullUrl = /^[a-z][a-z0-9+\-.]*:\/\//i.test(url) ? url : 'https://'+url;
+        sv.disabled=true; sv.textContent='…';
+        chrome.runtime.sendMessage({action:'fetch_page_title', url:fullUrl}, function(resp) {
+            const title = (resp&&resp.success&&resp.title) ? resp.title : (function(){try{return new URL(fullUrl).hostname;}catch(e){return fullUrl;}}());
+            doSave(title);
+        });
     });
-    cn.addEventListener('click',function(){wmClose(winId);});
-    const w=wmWindows[winId]; if(w)w.el.addEventListener('keydown',function(e){if(e.key==='Enter')sv.click();if(e.key==='Escape')wmClose(winId);});
+
+    cn.addEventListener('click', function(){ acHide(); wmClose(winId); });
+    const w=wmWindows[winId];
+    if(w) w.el.addEventListener('keydown', function(e){
+        if(e.key==='Enter' && !(acEl&&acEl.style.display!=='none'&&acFocused>=0)) sv.click();
+        if(e.key==='Escape'){ acHide(); wmClose(winId); }
+    });
 }
 
 // ==================== START MENU ====================
