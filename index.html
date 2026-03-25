@@ -19,8 +19,17 @@
             <span class="start-label">Пуск</span>
         </button>
         <div id="taskbar-sep"></div>
+        <div id="quick-launch">
+            <button class="ql-btn" title="Новая вкладка" onclick="chrome.tabs.create({})">🌐</button>
+            <button class="ql-btn" title="Поиск"          onclick="openSearch()">🔍</button>
+            <button class="ql-btn" title="Мой компьютер"  onclick="openMyComputer()">💻</button>
+            <button class="ql-btn" title="Блокнот"        onclick="openNotepad()">📝</button>
+            <button class="ql-btn" title="Стикер"         onclick="createSticky()">📌</button>
+        </div>
+        <div class="taskbar-sep-thin"></div>
         <div id="taskbar-windows"></div>
         <div id="systray">
+            <div id="tray-volume" title="Громкость">🔊</div>
             <div id="tray-clock">
                 <div id="tray-time">00:00</div>
                 <div id="tray-date">дата</div>
@@ -76,6 +85,13 @@
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="settings">
                     <span class="sm-icon">&#9881;</span>Настройки
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="run">
+                    <span class="sm-icon">&#9654;</span>Выполнить...
+                </div>
+                <div class="sm-item" data-action="taskmgr">
+                    <span class="sm-icon">&#128202;</span>Диспетчер задач
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item sm-allprograms-btn" data-action="allprograms">

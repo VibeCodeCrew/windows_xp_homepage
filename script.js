@@ -230,6 +230,75 @@ function updateClock() {
     if (de) de.textContent = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
+// ==================== SOUNDS ====================
+let _xpAudioCtx = null, _xpGain = null;
+function _getAudio() {
+    if (!_xpAudioCtx) {
+        try {
+            _xpAudioCtx = new AudioContext();
+            _xpGain = _xpAudioCtx.createGain();
+            _xpGain.gain.value = parseFloat(localStorage.getItem('edge_volume') || '0.7');
+            _xpGain.connect(_xpAudioCtx.destination);
+        } catch(e) { return null; }
+    }
+    if (_xpAudioCtx.state === 'suspended') _xpAudioCtx.resume();
+    return { ctx: _xpAudioCtx, gain: _xpGain };
+}
+function playSound(type) {
+    const a = _getAudio(); if (!a) return;
+    const ctx = a.ctx, master = a.gain;
+    const g = ctx.createGain(); g.connect(master);
+    const o = ctx.createOscillator(); o.connect(g);
+    const t = ctx.currentTime;
+    function tone(freq, startT, dur, wave, vol) {
+        const og = ctx.createGain(); og.connect(master);
+        const oo = ctx.createOscillator(); oo.connect(og);
+        oo.type = wave || 'sine';
+        oo.frequency.setValueAtTime(freq, t + startT);
+        og.gain.setValueAtTime(vol || 0.18, t + startT);
+        og.gain.exponentialRampToValueAtTime(0.0001, t + startT + dur);
+        oo.start(t + startT); oo.stop(t + startT + dur + 0.02);
+    }
+    o.stop(t); // never used, just init pattern
+    switch(type) {
+        case 'open':     tone(523, 0, 0.07); tone(659, 0.06, 0.07); break;
+        case 'close':    tone(659, 0, 0.07); tone(440, 0.06, 0.09); break;
+        case 'minimize': tone(440, 0, 0.05); tone(330, 0.04, 0.08); break;
+        case 'restore':  tone(330, 0, 0.05); tone(523, 0.04, 0.08); break;
+        case 'error':    tone(180, 0, 0.12, 'sawtooth', 0.22); tone(150, 0.1, 0.15, 'sawtooth', 0.2); break;
+        case 'notify':   tone(880, 0, 0.08); tone(1047, 0.07, 0.1); break;
+        case 'startup':
+            tone(523, 0, 0.15); tone(659, 0.12, 0.15); tone(784, 0.24, 0.2); tone(1047, 0.36, 0.3);
+            break;
+    }
+}
+
+// ==================== NOTIFICATIONS ====================
+let _balloonOffset = 0;
+function showNotification(title, text, icon, duration) {
+    icon = icon || '💬'; duration = duration || 4000;
+    playSound('notify');
+    const el = document.createElement('div');
+    el.className = 'xp-balloon';
+    el.style.bottom = (44 + _balloonOffset) + 'px';
+    _balloonOffset += 72;
+    el.innerHTML =
+        '<div class="xp-balloon-head">' +
+        '<span class="xp-balloon-icon">' + icon + '</span>' +
+        '<span class="xp-balloon-title">' + escapeHtml(title) + '</span>' +
+        '</div>' +
+        '<div class="xp-balloon-text">' + escapeHtml(text) + '</div>' +
+        '<span class="xp-balloon-close">\u2715</span>';
+    document.body.appendChild(el);
+    function remove() {
+        _balloonOffset = Math.max(0, _balloonOffset - 72);
+        el.style.opacity = '0'; el.style.transition = 'opacity 0.2s';
+        setTimeout(function() { if (el.parentNode) el.remove(); }, 220);
+    }
+    el.querySelector('.xp-balloon-close').addEventListener('click', remove);
+    setTimeout(remove, duration);
+}
+
 // ==================== PROPORTIONAL POSITIONING ====================
 // Each item stores posIcon / posTile: {x, y, dw, dh} — one per view mode.
 // x/y are pixels at save time; dw/dh are the desktop size at that moment.
@@ -1346,7 +1415,7 @@ function createSystemIcon(def, slotIndex) {
 
     icon.addEventListener('click', function(e) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
-        if (def.id === 'mycomputer') openSystemInfo();
+        if (def.id === 'mycomputer') openMyComputer();
         else if (def.id === 'recycle')  openRecycleBin();
     });
 
@@ -1681,6 +1750,7 @@ function wmCreate(id, title, contentEl, width, height, icon) {
     tb.querySelector('.xp-btn-close').addEventListener('click', function(e) { e.stopPropagation(); wmClose(id); });
     tb.addEventListener('dblclick', function() { wmMaximize(id); });
     wmAddToTaskbar(id, title, icon); wmFocus(id);
+    playSound('open');
     return win;
 }
 
@@ -1696,6 +1766,7 @@ function wmMinimize(id) {
     if (!wmWindows[id]) return;
     const w = wmWindows[id];
     if (w.minimized) return;
+    playSound('minimize');
     w.el.classList.add('wm-minimizing');
     if (w.taskbarBtn) w.taskbarBtn.classList.remove('active');
     activeWindowId = null;
@@ -1709,6 +1780,7 @@ function wmMinimize(id) {
 function wmRestore(id) {
     if (!wmWindows[id]) return;
     const w = wmWindows[id];
+    playSound('restore');
     w.el.style.display = 'flex';
     w.minimized = false;
     w.el.classList.add('wm-restoring');
@@ -1728,6 +1800,7 @@ function wmMaximize(id) {
 function wmClose(id) {
     if (!wmWindows[id]) return;
     const w = wmWindows[id];
+    playSound('close');
     w.el.classList.add('wm-closing');
     if (w.taskbarBtn) w.taskbarBtn.remove();
     if (activeWindowId === id) activeWindowId = null;
@@ -2248,6 +2321,7 @@ function showTileDialog(isFolder, item) {
             const childIdxToUpdate=(editCtx.folderIndex!==null)?(links[editCtx.folderIndex].items.length-1):editCtx.childIndex;
             const finalItem=(childIdxToUpdate!==null)?links[targetIdx].items[childIdxToUpdate]:links[targetIdx];
             if(finalItem&&finalItem.url) requestScreenshot(finalItem.url, finalItem);
+            if (!isEdit) showNotification('Ярлык создан', finalItem ? finalItem.name : '', '🔗');
         }
         saveAndRender(); wmClose(winId);
     }
@@ -2296,7 +2370,9 @@ function startMenuAction(a) {
         case 'pinball':    openPinball();     break;
         case 'paint':      openPaint();       break; case 'wordpad':    openWordPad();    break;
         case 'cmd':        openCmd();         break;
-        case 'settings':   openSettings();    break; case 'mycomputer': openSystemInfo(); break;
+        case 'settings':   openSettings();    break; case 'mycomputer': openMyComputer(); break;
+        case 'run':        openRun();         break; case 'taskmgr':   openTaskManager(); break;
+        case 'stickies':   createSticky();    break;
         case 'recycle':    openRecycleBin();  break; case 'setbg':      document.getElementById('bg-upload').click(); break;
         case 'removebg':   localStorage.removeItem(STORAGE.bg); applyBackground(); break;
         case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
@@ -2356,26 +2432,422 @@ function openSearch() {
     inp.addEventListener('keydown',function(e){if(e.key==='Enter')go('y');}); setTimeout(function(){inp.focus();},50);
 }
 
+// ==================== CALENDAR ====================
+function toggleCalendar() {
+    const existing = document.getElementById('xp-calendar');
+    if (existing) { existing.remove(); return; }
+    let calYear, calMonth;
+    const now = new Date();
+    calYear = now.getFullYear(); calMonth = now.getMonth();
+    const el = document.createElement('div');
+    el.id = 'xp-calendar'; el.className = 'xp-calendar';
+    document.body.appendChild(el);
+    function renderCal() {
+        const DAYS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+        const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+        const today = new Date(); const td = today.getDate(), tm = today.getMonth(), ty = today.getFullYear();
+        const first = new Date(calYear, calMonth, 1);
+        let startDow = first.getDay(); if (startDow === 0) startDow = 7; // Mon=1
+        const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+        const daysInPrev  = new Date(calYear, calMonth, 0).getDate();
+        let html = '<div class="xp-cal-header">' +
+            '<span class="xp-cal-nav" id="xp-cal-prev">&#9664;</span>' +
+            '<span>' + MONTHS[calMonth] + ' ' + calYear + '</span>' +
+            '<span class="xp-cal-nav" id="xp-cal-next">&#9654;</span>' +
+            '</div><div class="xp-cal-grid">';
+        DAYS.forEach(function(d){ html += '<div class="xp-cal-dow">'+d+'</div>'; });
+        for (let i = 1; i < startDow; i++) {
+            html += '<div class="xp-cal-day other-month">'+(daysInPrev - startDow + 1 + i)+'</div>';
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+            const isToday = d===td && calMonth===tm && calYear===ty;
+            html += '<div class="xp-cal-day'+(isToday?' today':'')+'">'+d+'</div>';
+        }
+        const total = startDow - 1 + daysInMonth;
+        const remainder = total % 7 === 0 ? 0 : 7 - (total % 7);
+        for (let i = 1; i <= remainder; i++) html += '<div class="xp-cal-day other-month">'+i+'</div>';
+        html += '</div>';
+        el.innerHTML = html;
+        document.getElementById('xp-cal-prev').addEventListener('click', function(e){
+            e.stopPropagation(); calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCal();
+        });
+        document.getElementById('xp-cal-next').addEventListener('click', function(e){
+            e.stopPropagation(); calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal();
+        });
+    }
+    renderCal();
+    const r = document.getElementById('tray-clock').getBoundingClientRect();
+    el.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+    el.style.right = (window.innerWidth - r.right) + 'px';
+    setTimeout(function() {
+        document.addEventListener('click', function dismiss(ev) {
+            if (!el.contains(ev.target) && ev.target !== document.getElementById('tray-clock')) {
+                el.remove(); document.removeEventListener('click', dismiss);
+            }
+        });
+    }, 10);
+}
+
+// ==================== VOLUME POPUP ====================
+function toggleVolumePopup() {
+    const existing = document.getElementById('xp-volume-popup');
+    if (existing) { existing.remove(); return; }
+    const popup = document.createElement('div');
+    popup.id = 'xp-volume-popup'; popup.className = 'xp-volume-popup';
+    const curVol = parseFloat(localStorage.getItem('edge_volume') || '0.7');
+    const lbl = document.createElement('label'); lbl.textContent = '🔊';
+    const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.05'; slider.value=curVol;
+    const valLbl = document.createElement('label'); valLbl.textContent = Math.round(curVol*100)+'%';
+    popup.appendChild(lbl); popup.appendChild(slider); popup.appendChild(valLbl);
+    document.body.appendChild(popup);
+    const tvEl = document.getElementById('tray-volume');
+    const r = tvEl.getBoundingClientRect();
+    popup.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+    popup.style.left = r.left + 'px';
+    function updateVolIcon(v) {
+        tvEl.textContent = v === 0 ? '🔇' : v < 0.3 ? '🔈' : v < 0.7 ? '🔉' : '🔊';
+    }
+    slider.addEventListener('input', function() {
+        const v = parseFloat(slider.value);
+        localStorage.setItem('edge_volume', v);
+        if (_xpGain) _xpGain.gain.value = v;
+        valLbl.textContent = Math.round(v*100)+'%';
+        updateVolIcon(v);
+    });
+    setTimeout(function() {
+        document.addEventListener('click', function dismiss(ev) {
+            if (!popup.contains(ev.target) && ev.target !== tvEl) {
+                popup.remove(); document.removeEventListener('click', dismiss);
+            }
+        });
+    }, 10);
+}
+
+// ==================== RUN DIALOG ====================
+function openRun() {
+    if (wmWindows['run']) { wmRestore('run'); wmFocus('run'); return; }
+    const c = document.createElement('div'); c.className = 'dialog-form';
+    c.innerHTML = '<div style="font-family:Tahoma,sans-serif;font-size:11px;color:#333;margin-bottom:8px;">Введите адрес интернет-ресурса или программы:</div>';
+    const fg = document.createElement('div'); fg.className='form-group'; fg.innerHTML='<label>Открыть:</label>';
+    const inp = document.createElement('input'); inp.type='text'; inp.placeholder='https://...';
+    fg.appendChild(inp); c.appendChild(fg);
+
+    // History autocomplete (reuse xp-url-autocomplete pattern)
+    const acEl = document.createElement('div'); acEl.className='xp-url-autocomplete'; acEl.style.display='none';
+    document.body.appendChild(acEl);
+    let acItems=[], acFocused=-1;
+    function acHide(){acEl.style.display='none';acItems=[];acFocused=-1;}
+    function acPos(){const r=inp.getBoundingClientRect();acEl.style.left=r.left+'px';acEl.style.top=r.bottom+'px';acEl.style.width=r.width+'px';}
+    inp.addEventListener('input',function(){
+        const q=inp.value.trim(); if(!q){acHide();return;}
+        chrome.history.search({text:q,maxResults:6,startTime:0},function(res){
+            acEl.innerHTML=''; acItems=res||[]; acFocused=-1;
+            acItems.forEach(function(h,i){
+                const row=document.createElement('div'); row.className='xp-url-ac-item';
+                const img=document.createElement('img'); img.src='chrome-extension://'+chrome.runtime.id+'/_favicon/?pageUrl='+encodeURIComponent(h.url)+'&size=16';
+                img.onerror=function(){img.style.visibility='hidden';};
+                const span=document.createElement('span'); span.textContent=h.url;
+                row.appendChild(img); row.appendChild(span);
+                row.addEventListener('mousedown',function(e){e.preventDefault();inp.value=h.url;acHide();inp.focus();});
+                acEl.appendChild(row);
+            });
+            if(acItems.length){acPos();acEl.style.display='block';}else acHide();
+        });
+    });
+    inp.addEventListener('keydown',function(e){
+        if(acEl.style.display==='none')return;
+        if(e.key==='ArrowDown'){e.preventDefault();const rows=acEl.querySelectorAll('.xp-url-ac-item');rows.forEach(r=>r.classList.remove('ac-focused'));acFocused=Math.min(acFocused+1,acItems.length-1);if(rows[acFocused])rows[acFocused].classList.add('ac-focused');}
+        else if(e.key==='ArrowUp'){e.preventDefault();const rows=acEl.querySelectorAll('.xp-url-ac-item');rows.forEach(r=>r.classList.remove('ac-focused'));acFocused=Math.max(acFocused-1,0);if(rows[acFocused])rows[acFocused].classList.add('ac-focused');}
+        else if(e.key==='Enter'&&acFocused>=0){inp.value=acItems[acFocused].url;acHide();}
+        else if(e.key==='Escape'){acHide();}
+    });
+    inp.addEventListener('blur',function(){setTimeout(acHide,150);});
+
+    const bd=document.createElement('div'); bd.className='dialog-btns';
+    const ok=document.createElement('button'); ok.className='xp-dialog-btn xp-dialog-btn-primary'; ok.textContent='OK';
+    const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
+    bd.appendChild(ok); bd.appendChild(cn); c.appendChild(bd);
+    wmCreate('run','Выполнить',c,360,140,'\u25B6');
+    setTimeout(function(){inp.focus();},50);
+    ok.addEventListener('click',function(){
+        acHide(); let url=inp.value.trim(); if(!url)return;
+        if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
+        window.open(url,'_blank'); wmClose('run');
+    });
+    cn.addEventListener('click',function(){acHide();wmClose('run');});
+    const w=wmWindows['run']; if(w)w.el.addEventListener('keydown',function(e){
+        if(e.key==='Enter'&&!(acEl.style.display!=='none'&&acFocused>=0))ok.click();
+        if(e.key==='Escape'){acHide();wmClose('run');}
+    });
+}
+
+// ==================== TASK MANAGER ====================
+function openTaskManager() {
+    if (wmWindows['taskmgr']) { wmRestore('taskmgr'); wmFocus('taskmgr'); return; }
+    const FAKE_PROCS = [
+        {name:'System Idle Process',pid:0,mem:'24 КБ'},
+        {name:'System',pid:4,mem:'244 КБ'},
+        {name:'explorer.exe',pid:1452,mem:'22 560 КБ'},
+        {name:'svchost.exe',pid:876,mem:'4 428 КБ'},
+        {name:'svchost.exe',pid:944,mem:'3 816 КБ'},
+        {name:'svchost.exe',pid:1024,mem:'7 240 КБ'},
+        {name:'lsass.exe',pid:672,mem:'1 524 КБ'},
+        {name:'winlogon.exe',pid:624,mem:'2 844 КБ'},
+        {name:'taskmgr.exe',pid:2048,mem:'3 976 КБ'},
+    ];
+    const c = document.createElement('div');
+    c.style.cssText = 'display:flex;flex-direction:column;height:100%;font-family:Tahoma,sans-serif;font-size:11px;';
+
+    // Tabs
+    const tabBar = document.createElement('div'); tabBar.className='settings-tabs'; tabBar.style.margin='0 0 6px 0';
+    const tabs = [['apps','Приложения'],['procs','Процессы']];
+    const panels = {};
+    tabs.forEach(function(t){
+        const btn=document.createElement('div'); btn.className='settings-tab'+(t[0]==='apps'?' active':'');
+        btn.textContent=t[1]; btn.dataset.tab=t[0]; tabBar.appendChild(btn);
+        const panel=document.createElement('div'); panel.className='settings-tab-content'+(t[0]==='apps'?' active':'');
+        panel.style.cssText='flex:1;overflow-y:auto;'; panels[t[0]]=panel;
+    });
+    tabBar.querySelectorAll && tabBar.addEventListener('click',function(e){
+        const btn=e.target.closest('.settings-tab'); if(!btn)return;
+        tabBar.querySelectorAll('.settings-tab').forEach(function(b){b.classList.remove('active');});
+        btn.classList.add('active');
+        Object.keys(panels).forEach(function(k){panels[k].classList.remove('active');});
+        panels[btn.dataset.tab].classList.add('active');
+    });
+
+    // Apps panel
+    const appsPanel = panels['apps'];
+    appsPanel.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
+    function refreshApps() {
+        appsPanel.innerHTML = '';
+        const tbl = document.createElement('table'); tbl.style.cssText='width:100%;border-collapse:collapse;';
+        tbl.innerHTML = '<tr style="background:#ECE9D8;font-weight:bold;"><td style="padding:3px 6px;border-bottom:1px solid #aca899;">Задача</td><td style="padding:3px 6px;border-bottom:1px solid #aca899;width:70px;">Статус</td><td style="padding:3px 6px;border-bottom:1px solid #aca899;width:80px;"></td></tr>';
+        Object.keys(wmWindows).forEach(function(id) {
+            const w=wmWindows[id]; if(!w)return;
+            const titleEl=w.el.querySelector('.xp-titlebar-title'); const title=titleEl?titleEl.textContent:'(окно)';
+            const tr=document.createElement('tr'); tr.style.cursor='default';
+            tr.innerHTML='<td style="padding:2px 6px;">'+ escapeHtml(title) +'</td><td style="padding:2px 6px;color:#006600;">Работает</td><td style="padding:2px 6px;"></td>';
+            const killBtn=document.createElement('button'); killBtn.className='xp-dialog-btn'; killBtn.textContent='Снять'; killBtn.style.cssText='min-width:0;padding:1px 6px;height:18px;font-size:10px;';
+            killBtn.addEventListener('click',function(){wmClose(id);refreshApps();});
+            tr.cells[2].appendChild(killBtn);
+            tr.addEventListener('dblclick',function(){wmRestore(id);wmFocus(id);});
+            tbl.appendChild(tr);
+        });
+        if(Object.keys(wmWindows).filter(function(k){return k!=='taskmgr';}).length===0){
+            const tr=document.createElement('tr');tr.innerHTML='<td colspan="3" style="padding:6px;color:#999;text-align:center;">Нет открытых окон</td>';tbl.appendChild(tr);
+        }
+        appsPanel.appendChild(tbl);
+    }
+    refreshApps();
+
+    // Processes panel
+    const procsPanel = panels['procs'];
+    procsPanel.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
+    const pTbl = document.createElement('table'); pTbl.style.cssText='width:100%;border-collapse:collapse;';
+    let pHtml='<tr style="background:#ECE9D8;font-weight:bold;"><td style="padding:3px 6px;border-bottom:1px solid #aca899;">Имя</td><td style="padding:3px 6px;border-bottom:1px solid #aca899;width:50px;">PID</td><td style="padding:3px 6px;border-bottom:1px solid #aca899;width:90px;">Память</td></tr>';
+    FAKE_PROCS.forEach(function(p){pHtml+='<tr><td style="padding:2px 6px;">'+p.name+'</td><td style="padding:2px 6px;">'+p.pid+'</td><td style="padding:2px 6px;">'+p.mem+'</td></tr>';});
+    // Add browser real info
+    if(window.performance&&performance.memory){
+        const mb=Math.round(performance.memory.usedJSHeapSize/1048576);
+        pHtml+='<tr style="background:#f8f8e0;"><td style="padding:2px 6px;">chrome.exe</td><td style="padding:2px 6px;">–</td><td style="padding:2px 6px;">'+mb+' МБ</td></tr>';
+    }
+    pTbl.innerHTML=pHtml; procsPanel.appendChild(pTbl);
+
+    // Status bar
+    const statusBar=document.createElement('div');
+    statusBar.style.cssText='display:flex;gap:16px;padding:4px 8px;background:#ECE9D8;border-top:1px solid #aca899;font-size:10px;color:#333;flex-shrink:0;';
+    function updateStatus(){
+        const cnt=Object.keys(wmWindows).length;
+        statusBar.textContent='Процессы: '+(FAKE_PROCS.length+1)+'\u2002|\u2002Окон: '+cnt+'\u2002|\u2002ЦП: '+(Math.floor(Math.random()*8)+1)+'%';
+    }
+    updateStatus();
+
+    c.appendChild(tabBar);
+    Object.values(panels).forEach(function(p){c.appendChild(p);});
+    c.appendChild(statusBar);
+
+    wmCreate('taskmgr','Диспетчер задач',c,520,360,'📊');
+    const tmRefresh = setInterval(function(){
+        if(!wmWindows['taskmgr']){clearInterval(tmRefresh);return;}
+        const activeTab=c.querySelector('.settings-tab.active');
+        if(activeTab&&activeTab.dataset.tab==='apps') refreshApps();
+        updateStatus();
+    },2000);
+}
+
+// ==================== MY COMPUTER ====================
+function openMyComputer() {
+    if (wmWindows['mycomputer']) { wmRestore('mycomputer'); wmFocus('mycomputer'); return; }
+    const wrap = document.createElement('div'); wrap.className = 'mycomputer-wrap';
+
+    const sidebar = document.createElement('div'); sidebar.className = 'mycomputer-sidebar';
+    sidebar.innerHTML = '<h4>Системные задачи</h4>';
+    [['📝 Блокнот', function(){openNotepad();}],['🔍 Поиск', function(){openSearch();}],['♻️ Корзина', function(){openRecycleBin();}],['💻 Сведения', function(){openSystemInfo();}]].forEach(function(item){
+        const d=document.createElement('div'); d.className='mycomputer-sidebar-item';
+        d.textContent=item[0]; d.addEventListener('click',item[1]); sidebar.appendChild(d);
+    });
+
+    const main = document.createElement('div'); main.className = 'mycomputer-main';
+    const addr = document.createElement('div'); addr.className = 'mycomputer-address';
+    addr.innerHTML = '<span>💻</span><span>Мой компьютер</span>';
+    main.appendChild(addr);
+
+    const drives = document.createElement('div'); drives.className = 'mycomputer-drives';
+    const driveItems = [
+        {icon:'💾',name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){wmClose('mycomputer');}},
+        {icon:'📝',name:'Документы',info:'WordPad',action:function(){openWordPad();}},
+        {icon:'♻️',name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
+        {icon:'💻',name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
+    ];
+    driveItems.forEach(function(d){
+        const el=document.createElement('div'); el.className='mycomputer-drive';
+        el.innerHTML='<div class="mycomputer-drive-icon">'+d.icon+'</div><div class="mycomputer-drive-name">'+escapeHtml(d.name)+'</div><div class="mycomputer-drive-info">'+escapeHtml(d.info)+'</div>';
+        el.addEventListener('dblclick',d.action); drives.appendChild(el);
+    });
+    main.appendChild(drives);
+    wrap.appendChild(sidebar); wrap.appendChild(main);
+    wmCreate('mycomputer','Мой компьютер',wrap,540,360,'💻');
+}
+
+// ==================== STICKY NOTES ====================
+let stickies = JSON.parse(localStorage.getItem('edge_stickies') || '[]');
+function saveStickies() { localStorage.setItem('edge_stickies', JSON.stringify(stickies)); }
+const STICKY_COLORS = [
+    {bg:'#fff9a0',bar:'#d4b800',label:'Жёлтый'},
+    {bg:'#b8f0b8',bar:'#3a9a3a',label:'Зелёный'},
+    {bg:'#b8d8ff',bar:'#2060c0',label:'Синий'},
+    {bg:'#ffb8d0',bar:'#c03060',label:'Розовый'},
+];
+function createSticky(opts) {
+    const id = opts&&opts.id ? opts.id : 'sticky_'+Date.now();
+    const x  = opts&&opts.x!=null ? opts.x : Math.floor(Math.random()*300+100);
+    const y  = opts&&opts.y!=null ? opts.y : Math.floor(Math.random()*200+60);
+    const w  = opts&&opts.w ? opts.w : 180;
+    const h  = opts&&opts.h ? opts.h : 140;
+    const text = opts&&opts.text ? opts.text : '';
+    const colorIdx = opts&&opts.colorIdx!=null ? opts.colorIdx : 0;
+    const color = STICKY_COLORS[colorIdx] || STICKY_COLORS[0];
+
+    const el = document.createElement('div');
+    el.className = 'xp-sticky'; el.dataset.stickyId = id;
+    el.style.cssText = 'left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;background:'+color.bg+';';
+
+    const bar = document.createElement('div'); bar.className = 'xp-sticky-titlebar';
+    bar.style.background = 'linear-gradient(180deg,'+color.bar+' 0%,'+color.bar+'cc 100%)';
+    bar.style.color = '#fff';
+
+    const colorBtns = document.createElement('div'); colorBtns.className = 'xp-sticky-colors';
+    STICKY_COLORS.forEach(function(c,i){
+        const cb=document.createElement('div'); cb.className='xp-sticky-color-btn';
+        cb.style.background=c.bg; cb.title=c.label;
+        cb.addEventListener('click',function(){
+            const s=stickies.find(function(s){return s.id===id;});
+            if(s){s.colorIdx=i;saveStickies();}
+            // reapply colors
+            el.style.background=STICKY_COLORS[i].bg;
+            bar.style.background='linear-gradient(180deg,'+STICKY_COLORS[i].bar+' 0%,'+STICKY_COLORS[i].bar+'cc 100%)';
+            body.style.background='transparent';
+        });
+        colorBtns.appendChild(cb);
+    });
+    const closeBtn = document.createElement('span'); closeBtn.className = 'xp-sticky-close'; closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', function(){
+        stickies = stickies.filter(function(s){return s.id!==id;});
+        saveStickies(); el.remove();
+    });
+    bar.appendChild(colorBtns); bar.appendChild(closeBtn);
+
+    const body = document.createElement('textarea'); body.className = 'xp-sticky-body';
+    body.value = text; body.placeholder = 'Заметка...';
+    body.style.background = 'transparent';
+    body.addEventListener('input', function(){
+        const s=stickies.find(function(s){return s.id===id;}); if(s){s.text=body.value;saveStickies();}
+    });
+
+    const rh = document.createElement('div'); rh.className = 'xp-sticky-resize';
+
+    el.appendChild(bar); el.appendChild(body); el.appendChild(rh);
+    document.getElementById('desktop').appendChild(el);
+
+    // Drag
+    bar.addEventListener('mousedown', function(e){
+        if(e.target===closeBtn||e.target.classList.contains('xp-sticky-color-btn'))return;
+        e.preventDefault();
+        const sx=e.clientX,sy=e.clientY,ox=el.offsetLeft,oy=el.offsetTop;
+        el.style.zIndex=8600;
+        function onM(e){el.style.left=(ox+e.clientX-sx)+'px';el.style.top=Math.max(0,oy+e.clientY-sy)+'px';}
+        function onU(){
+            document.removeEventListener('mousemove',onM);document.removeEventListener('mouseup',onU);
+            el.style.zIndex=8500;
+            const s=stickies.find(function(s){return s.id===id;});
+            if(s){s.x=el.offsetLeft;s.y=el.offsetTop;saveStickies();}
+        }
+        document.addEventListener('mousemove',onM);document.addEventListener('mouseup',onU);
+    });
+    // Resize
+    rh.addEventListener('mousedown',function(e){
+        e.preventDefault(); e.stopPropagation();
+        const sx=e.clientX,sy=e.clientY,sw=el.offsetWidth,sh=el.offsetHeight;
+        function onM(e){
+            el.style.width=Math.max(120,sw+e.clientX-sx)+'px';
+            el.style.height=Math.max(80,sh+e.clientY-sy)+'px';
+        }
+        function onU(){
+            document.removeEventListener('mousemove',onM);document.removeEventListener('mouseup',onU);
+            const s=stickies.find(function(s){return s.id===id;});
+            if(s){s.w=el.offsetWidth;s.h=el.offsetHeight;saveStickies();}
+        }
+        document.addEventListener('mousemove',onM);document.addEventListener('mouseup',onU);
+    });
+
+    if (!opts || !opts.id) {
+        stickies.push({id,x,y,w,h,text,colorIdx});
+        saveStickies();
+    }
+    return el;
+}
+function renderStickies() {
+    stickies.forEach(function(s){ createSticky(s); });
+}
+
 // ==================== SETTINGS ====================
 function openSettings() {
     if (wmWindows['settings']) { wmRestore('settings'); wmFocus('settings'); return; }
-    const c = document.createElement('div'); c.className = 'settings-form';
+    const c = document.createElement('div');
+    c.style.cssText = 'display:flex;flex-direction:column;height:100%;font-family:Tahoma,sans-serif;font-size:11px;padding:8px;box-sizing:border-box;overflow:auto;';
 
-    // View mode selector (always shown)
-    const vg = document.createElement('div'); vg.className = 'form-group';
-    vg.innerHTML = '<label>Режим вида: </label>';
+    // Tabs
+    const tabBar = document.createElement('div'); tabBar.className = 'settings-tabs';
+    const tabNames = [['theme','Тема'],['desktop','Рабочий стол'],['screensaver','Заставка'],['params','Параметры']];
+    const tabPanels = {};
+    tabNames.forEach(function(tn, i) {
+        const btn = document.createElement('div'); btn.className = 'settings-tab' + (i===0?' active':'');
+        btn.textContent = tn[1]; btn.dataset.tab = tn[0]; tabBar.appendChild(btn);
+        const p = document.createElement('div'); p.className = 'settings-tab-content settings-form' + (i===0?' active':'');
+        tabPanels[tn[0]] = p;
+    });
+    tabBar.addEventListener('click', function(e) {
+        const btn = e.target.closest('.settings-tab'); if(!btn)return;
+        tabBar.querySelectorAll('.settings-tab').forEach(function(b){b.classList.remove('active');});
+        btn.classList.add('active');
+        Object.values(tabPanels).forEach(function(p){p.classList.remove('active');});
+        tabPanels[btn.dataset.tab].classList.add('active');
+    });
+    c.appendChild(tabBar);
+    Object.values(tabPanels).forEach(function(p){c.appendChild(p);});
+
+    // --- Tab: Тема ---
+    const tP = tabPanels['theme'];
+    const vg = document.createElement('div'); vg.className = 'form-group'; vg.innerHTML = '<label>Режим вида: </label>';
     const vs = document.createElement('select'); vs.style.cssText = 'margin-left:4px;font-size:11px;';
     [['glass','Плитки (стекло)'],['window','Окна с превью'],['icon','Ярлыки XP']].forEach(function(opt) {
         const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
         if (settings.viewMode === opt[0]) o.selected = true;
         vs.appendChild(o);
     });
-    vg.appendChild(vs); c.appendChild(vg);
-
-    // Mode-specific controls container
-    const modeBlock = document.createElement('div'); modeBlock.className = 'settings-mode-block';
-    c.appendChild(modeBlock);
-
+    vg.appendChild(vs); tP.appendChild(vg);
+    const modeBlock = document.createElement('div'); modeBlock.className = 'settings-mode-block'; tP.appendChild(modeBlock);
     function mkR(label, key, min, max, sfx, step) {
         const g = document.createElement('div'); g.className = 'form-group';
         const l = document.createElement('label'); l.textContent = label + ': ';
@@ -2391,64 +2863,66 @@ function openSettings() {
             renderDesktop();
         });
     }
-
     function buildModeControls() {
         modeBlock.innerHTML = '';
         if (settings.viewMode === 'window') {
-            mkR('Ширина превью', 'tileWidth',  80, 300, 'px');
+            mkR('Ширина превью', 'tileWidth', 80, 300, 'px');
             mkR('Высота превью', 'tileHeight', 50, 300, 'px');
         } else if (settings.viewMode === 'glass') {
-            // Columns
-            var cg = document.createElement('div'); cg.className = 'form-group';
-            cg.innerHTML = '<label>Колонок в ряду </label>';
-            var ci = document.createElement('input'); ci.type = 'number'; ci.min = 2; ci.max = 12;
-            ci.value = settings.glassCols; ci.style.width = '50px';
+            var cg = document.createElement('div'); cg.className = 'form-group'; cg.innerHTML = '<label>Колонок в ряду </label>';
+            var ci = document.createElement('input'); ci.type='number'; ci.min=2; ci.max=12; ci.value=settings.glassCols; ci.style.width='50px';
             cg.querySelector('label').appendChild(ci); modeBlock.appendChild(cg);
-            ci.addEventListener('input', function() {
-                settings.glassCols = parseInt(ci.value) || 4;
-                localStorage.setItem(STORAGE.glassCols, settings.glassCols);
-                renderDesktop();
-            });
-            mkR('Ширина плиток', 'glassTileWidth', 50, 300, 'px');
-            mkR('Высота плиток', 'glassTileHeight', 50, 300, 'px');
-            mkR('Прозрачность', 'opacity', 0.1, 1, '%', 0.05);
-            // Glass blur checkbox
-            var sBgG = document.createElement('div'); sBgG.className = 'form-group';
-            var sBgChk = document.createElement('input'); sBgChk.type = 'checkbox'; sBgChk.checked = settings.glassScreenshotBg;
-            var sBgLbl = document.createElement('label'); sBgLbl.style.cursor = 'pointer';
-            sBgLbl.appendChild(sBgChk); sBgLbl.append(' Скриншот как фон плитки');
-            sBgG.appendChild(sBgLbl); modeBlock.appendChild(sBgG);
-
-            sBgChk.addEventListener('change', function() {
-                settings.glassScreenshotBg = sBgChk.checked;
-                localStorage.setItem('edge_glass_screenshot_bg', settings.glassScreenshotBg);
-                renderDesktop();
-            });
-
+            ci.addEventListener('input', function() { settings.glassCols=parseInt(ci.value)||4; localStorage.setItem(STORAGE.glassCols,settings.glassCols); renderDesktop(); });
+            mkR('Ширина плиток','glassTileWidth',50,300,'px'); mkR('Высота плиток','glassTileHeight',50,300,'px'); mkR('Прозрачность','opacity',0.1,1,'%',0.05);
+            var sBgG=document.createElement('div'); sBgG.className='form-group';
+            var sBgChk=document.createElement('input'); sBgChk.type='checkbox'; sBgChk.checked=settings.glassScreenshotBg;
+            var sBgLbl=document.createElement('label'); sBgLbl.style.cursor='pointer';
+            sBgLbl.appendChild(sBgChk); sBgLbl.append(' Скриншот как фон плитки'); sBgG.appendChild(sBgLbl); modeBlock.appendChild(sBgG);
+            sBgChk.addEventListener('change',function(){settings.glassScreenshotBg=sBgChk.checked;localStorage.setItem('edge_glass_screenshot_bg',settings.glassScreenshotBg);renderDesktop();});
         } else if (settings.viewMode === 'icon') {
-            mkR('Размер иконок', 'iconSize', 40, 120, 'px');
+            mkR('Размер иконок','iconSize',40,120,'px');
         }
     }
-
     buildModeControls();
+    vs.addEventListener('change', function() { settings.viewMode=vs.value; localStorage.setItem(STORAGE.viewMode,vs.value); buildModeControls(); renderDesktop(); });
 
-    vs.addEventListener('change', function() {
-        settings.viewMode = vs.value;
-        localStorage.setItem(STORAGE.viewMode, vs.value);
-        buildModeControls();
-        renderDesktop();
-    });
+    // --- Tab: Рабочий стол ---
+    const dP = tabPanels['desktop'];
+    const bgBtns = document.createElement('div'); bgBtns.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;';
+    const setBgBtn = document.createElement('button'); setBgBtn.className='xp-dialog-btn'; setBgBtn.textContent='Выбрать фон...';
+    const resetBgBtn = document.createElement('button'); resetBgBtn.className='xp-dialog-btn'; resetBgBtn.textContent='По умолчанию';
+    bgBtns.appendChild(setBgBtn); bgBtns.appendChild(resetBgBtn); dP.appendChild(bgBtns);
+    const ugD=document.createElement('div'); ugD.className='form-group'; ugD.style.marginTop='10px'; ugD.innerHTML='<label>Имя пользователя: </label>';
+    const uI=document.createElement('input'); uI.type='text'; uI.value=username; uI.style.width='120px';
+    ugD.querySelector('label').appendChild(uI); dP.appendChild(ugD);
+    setBgBtn.addEventListener('click',function(){document.getElementById('bg-upload').click();});
+    resetBgBtn.addEventListener('click',function(){localStorage.removeItem(STORAGE.bg);applyBackground();});
+    uI.addEventListener('change',function(){username=uI.value.trim()||'User';localStorage.setItem(STORAGE.username,username);const s=document.querySelector('.sm-username');if(s)s.textContent=username;});
 
-    // Username
-    const ug = document.createElement('div'); ug.className = 'form-group'; ug.innerHTML = '<label>Имя пользователя: </label>';
-    const uI = document.createElement('input'); uI.type='text'; uI.value=username; uI.style.width='120px';
-    ug.querySelector('label').appendChild(uI); c.appendChild(ug);
+    // --- Tab: Заставка ---
+    const sP = tabPanels['screensaver'];
+    const ssEnabled = localStorage.getItem('edge_ss_enabled') !== 'false';
+    const ssDelay   = parseInt(localStorage.getItem('edge_ss_delay') || '5');
+    const ssChkG = document.createElement('div'); ssChkG.className='form-group';
+    const ssChk = document.createElement('input'); ssChk.type='checkbox'; ssChk.checked=ssEnabled;
+    const ssChkLbl = document.createElement('label'); ssChkLbl.style.cursor='pointer';
+    ssChkLbl.appendChild(ssChk); ssChkLbl.append(' Включить заставку (трубы)');
+    ssChkG.appendChild(ssChkLbl); sP.appendChild(ssChkG);
+    const ssDelayG = document.createElement('div'); ssDelayG.className='form-group';
+    ssDelayG.innerHTML='<label>Задержка: </label>';
+    const ssDelayInp = document.createElement('input'); ssDelayInp.type='range'; ssDelayInp.min=1; ssDelayInp.max=30; ssDelayInp.value=ssDelay;
+    const ssDelayLbl = document.createElement('span'); ssDelayLbl.textContent=ssDelay+' мин';
+    ssDelayG.querySelector('label').appendChild(ssDelayInp); ssDelayG.querySelector('label').appendChild(ssDelayLbl); sP.appendChild(ssDelayG);
+    const ssPrevBtn = document.createElement('button'); ssPrevBtn.className='xp-dialog-btn'; ssPrevBtn.textContent='Просмотр'; ssPrevBtn.style.marginTop='6px'; sP.appendChild(ssPrevBtn);
+    ssChk.addEventListener('change',function(){localStorage.setItem('edge_ss_enabled',ssChk.checked);resetScreensaver();});
+    ssDelayInp.addEventListener('input',function(){const v=parseInt(ssDelayInp.value);ssDelayLbl.textContent=v+' мин';localStorage.setItem('edge_ss_delay',v);resetScreensaver();});
+    ssPrevBtn.addEventListener('click',function(){wmClose('settings');startScreensaver();});
 
-    const rb = document.createElement('button'); rb.className='xp-dialog-btn'; rb.textContent='Сбросить фон'; rb.style.marginTop='8px'; c.appendChild(rb);
+    // --- Tab: Параметры --- (nothing new, just a note)
+    const parP = tabPanels['params'];
+    parP.innerHTML = '<div style="color:#666;font-size:11px;">Параметры режима отображения доступны во вкладке «Тема».</div>';
 
-    wmCreate('settings', 'Свойства экрана', c, 360, 240, '\u2699\uFE0F');
-    uI.addEventListener('change', function() { username=uI.value.trim()||'User'; localStorage.setItem(STORAGE.username,username); const s=document.querySelector('.sm-username'); if(s)s.textContent=username; });
-    rb.addEventListener('click', function() { localStorage.removeItem(STORAGE.bg); applyBackground(); });
+    wmCreate('settings', 'Свойства: Экран', c, 400, 340, '\u2699\uFE0F');
 }
 
 // ==================== RECYCLE BIN ====================
@@ -4095,12 +4569,13 @@ document.getElementById('bg-upload').addEventListener('change',function(e){
 
 // ==================== SCREENSAVER ====================
 let ssTimer = null, ssActive = false, ssEl = null;
-const SS_DELAY = 5 * 60 * 1000; // 5 minutes idle
 
 function resetScreensaver() {
     if (ssActive) stopScreensaver();
     clearTimeout(ssTimer);
-    ssTimer = setTimeout(startScreensaver, SS_DELAY);
+    if (localStorage.getItem('edge_ss_enabled') === 'false') return;
+    const delayMin = parseInt(localStorage.getItem('edge_ss_delay') || '5');
+    ssTimer = setTimeout(startScreensaver, delayMin * 60 * 1000);
 }
 
 function startScreensaver() {
@@ -4246,6 +4721,8 @@ function deleteSelectedIcons() {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') { hideContextMenu(); closeStartMenu(); }
+    if (e.ctrlKey && e.altKey && (e.key === 'r' || e.key === 'к')) { e.preventDefault(); openRun(); return; }
+    if (e.ctrlKey && e.shiftKey && e.key === 'Escape') { e.preventDefault(); openTaskManager(); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
         const tag = document.activeElement && document.activeElement.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
@@ -4313,16 +4790,31 @@ document.addEventListener('DOMContentLoaded', function() {
     applyBackground();
     const smUser = document.querySelector('.sm-username');
     if (smUser) smUser.textContent = username;
-    initScreenshots(function() { renderDesktop(); });
+    initScreenshots(function() { renderDesktop(); renderStickies(); });
     updateClock();
     setInterval(updateClock, 1000);
+
+    // Startup sound (one-time)
+    if (!sessionStorage.getItem('xp_started')) {
+        sessionStorage.setItem('xp_started', '1');
+        setTimeout(function() { playSound('startup'); }, 300);
+    }
+
+    // Calendar: click on tray-clock
+    const trayClock = document.getElementById('tray-clock');
+    if (trayClock) { trayClock.style.cursor = 'pointer'; trayClock.addEventListener('click', function(e){ e.stopPropagation(); toggleCalendar(); }); }
+
+    // Volume icon click
+    const trayVol = document.getElementById('tray-volume');
+    if (trayVol) trayVol.addEventListener('click', function(e){ e.stopPropagation(); toggleVolumePopup(); });
 
     // 5 быстрых кликов по часам = BSOD
     let clockClicks = 0, clockTimer = null;
     const trayTime = document.getElementById('tray-time');
     if (trayTime) {
         trayTime.style.cursor = 'default';
-        trayTime.addEventListener('click', function() {
+        trayTime.addEventListener('click', function(e) {
+            e.stopPropagation(); // не триггерим toggleCalendar
             clockClicks++;
             clearTimeout(clockTimer);
             if (clockClicks >= 5) { clockClicks = 0; triggerBSOD(); return; }

@@ -1151,3 +1151,170 @@ body {
 #pb-score { font-size:16px; font-weight:bold; color:#fff; min-width:60px; text-align:center; }
 #pb-balls { font-size:14px; color:#c080ff; letter-spacing:2px; text-align:center; }
 #pb-msg { font-size:10px; color:#8060b0; }
+
+/* ===================== QUICK LAUNCH ===================== */
+#quick-launch { display:flex; align-items:center; gap:1px; padding:0 4px; flex-shrink:0; }
+.ql-btn {
+    width:26px; height:26px; background:transparent; border:1px solid transparent;
+    border-radius:3px; cursor:pointer; font-size:15px; display:flex; align-items:center;
+    justify-content:center; padding:0; flex-shrink:0;
+}
+.ql-btn:hover { background:rgba(255,255,255,0.18); border-color:rgba(255,255,255,0.3); }
+.ql-btn:active { background:rgba(0,0,0,0.2); }
+.taskbar-sep-thin {
+    width:1px; height:28px; flex-shrink:0; margin:0 3px;
+    background:linear-gradient(180deg,#0a2060 0%,#2050b0 50%,#0a2060 100%);
+    border-left:1px solid #061540; border-right:1px solid #3060c0;
+}
+
+/* ===================== TRAY VOLUME ===================== */
+#tray-volume {
+    font-size:14px; cursor:pointer; padding:0 6px; line-height:30px;
+    border-radius:2px; user-select:none;
+}
+#tray-volume:hover { background:rgba(255,255,255,0.15); }
+.xp-volume-popup {
+    position:fixed; background:#ECE9D8;
+    border:2px outset #fff; box-shadow:2px 2px 6px rgba(0,0,0,0.4);
+    z-index:9700; padding:8px 10px; display:flex; flex-direction:column;
+    align-items:center; gap:4px; font-family:Tahoma,sans-serif; font-size:11px;
+    min-width:44px;
+}
+.xp-volume-popup label { color:#333; font-size:10px; }
+.xp-volume-popup input[type=range] {
+    writing-mode:vertical-lr; direction:rtl;
+    width:22px; height:80px; cursor:pointer; appearance:slider-vertical;
+    -webkit-appearance:slider-vertical;
+}
+
+/* ===================== NOTIFICATION BALLOON ===================== */
+.xp-balloon {
+    position:fixed; right:10px; background:#ffffc0;
+    border:1px solid #b8a000; border-radius:4px;
+    box-shadow:2px 2px 8px rgba(0,0,0,0.4);
+    padding:8px 28px 8px 10px; max-width:260px; min-width:140px;
+    font-family:Tahoma,sans-serif; font-size:11px; z-index:9800;
+    animation:balloon-in 0.2s ease;
+}
+.xp-balloon::after {
+    content:''; position:absolute; bottom:-8px; right:18px;
+    border:8px solid transparent; border-top-color:#b8a000;
+    border-bottom:none;
+}
+.xp-balloon::before {
+    content:''; position:absolute; bottom:-6px; right:19px;
+    border:7px solid transparent; border-top-color:#ffffc0;
+    border-bottom:none; z-index:1;
+}
+.xp-balloon-head { display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+.xp-balloon-icon { font-size:14px; }
+.xp-balloon-title { font-weight:bold; font-size:11px; color:#1a1a1a; }
+.xp-balloon-text { color:#333; line-height:1.3; }
+.xp-balloon-close {
+    position:absolute; top:4px; right:6px; cursor:pointer;
+    font-size:11px; color:#666; line-height:1;
+}
+.xp-balloon-close:hover { color:#000; }
+@keyframes balloon-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* ===================== CALENDAR ===================== */
+.xp-calendar {
+    position:fixed; bottom:44px; right:10px; z-index:9700;
+    background:#fff; border:1px solid #7f9db9;
+    box-shadow:2px 2px 8px rgba(0,0,0,0.4);
+    font-family:Tahoma,sans-serif; font-size:11px; min-width:180px;
+}
+.xp-cal-header {
+    background:linear-gradient(180deg,#0058ee 0%,#0555ee 60%,#0349c8 100%);
+    color:#fff; display:flex; align-items:center; justify-content:space-between;
+    padding:4px 6px; font-weight:bold; font-size:11px;
+}
+.xp-cal-nav { cursor:pointer; padding:0 4px; user-select:none; }
+.xp-cal-nav:hover { background:rgba(255,255,255,0.2); }
+.xp-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); padding:4px; gap:1px; }
+.xp-cal-dow { text-align:center; color:#316ac5; font-weight:bold; font-size:10px; padding:2px 0; }
+.xp-cal-day {
+    text-align:center; padding:3px 2px; border-radius:2px; cursor:default;
+    line-height:1.4; font-size:11px;
+}
+.xp-cal-day:hover { background:#ddeeff; }
+.xp-cal-day.other-month { color:#aaa; }
+.xp-cal-day.today { background:#316ac5; color:#fff; font-weight:bold; border-radius:2px; }
+
+/* ===================== STICKY NOTES ===================== */
+.xp-sticky {
+    position:absolute; z-index:8500; min-width:140px; min-height:100px;
+    display:flex; flex-direction:column; box-shadow:3px 3px 10px rgba(0,0,0,0.3);
+    border:1px solid rgba(0,0,0,0.2);
+}
+.xp-sticky-titlebar {
+    height:20px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 4px; cursor:move; flex-shrink:0; font-size:11px; font-weight:bold;
+    font-family:Tahoma,sans-serif; color:#333;
+}
+.xp-sticky-close {
+    cursor:pointer; font-size:12px; line-height:1; padding:1px 3px;
+    border-radius:2px; user-select:none; color:#555;
+}
+.xp-sticky-close:hover { background:rgba(0,0,0,0.15); color:#000; }
+.xp-sticky-colors { display:flex; gap:3px; }
+.xp-sticky-color-btn {
+    width:12px; height:12px; border-radius:50%; cursor:pointer;
+    border:1px solid rgba(0,0,0,0.3); flex-shrink:0;
+}
+.xp-sticky-body {
+    flex:1; padding:6px; outline:none; border:none; resize:none;
+    font-family:Tahoma,sans-serif; font-size:12px; background:transparent;
+    line-height:1.4; overflow:auto; min-height:80px;
+}
+.xp-sticky-resize {
+    width:12px; height:12px; position:absolute; bottom:0; right:0;
+    cursor:se-resize; background:rgba(0,0,0,0.15);
+    clip-path:polygon(100% 0,100% 100%,0 100%);
+}
+
+/* ===================== MY COMPUTER ===================== */
+.mycomputer-wrap { display:flex; height:100%; overflow:hidden; }
+.mycomputer-sidebar {
+    width:140px; flex-shrink:0; background:#e8e4f0; border-right:1px solid #aca899;
+    padding:10px 8px; font-family:Tahoma,sans-serif; font-size:11px; overflow-y:auto;
+}
+.mycomputer-sidebar h4 { color:#316ac5; font-size:11px; margin:0 0 6px 0; border-bottom:1px solid #316ac5; padding-bottom:3px; }
+.mycomputer-sidebar-item {
+    display:flex; align-items:center; gap:5px; padding:3px 4px; cursor:pointer;
+    border-radius:2px; color:#1a1a1a;
+}
+.mycomputer-sidebar-item:hover { background:#d0d8f0; }
+.mycomputer-main { flex:1; padding:10px; overflow-y:auto; }
+.mycomputer-address {
+    background:#fff; border:2px inset #aca899; padding:2px 6px;
+    font-family:Tahoma,sans-serif; font-size:11px; color:#333;
+    margin-bottom:8px; display:flex; align-items:center; gap:4px;
+}
+.mycomputer-drives { display:flex; flex-wrap:wrap; gap:10px; }
+.mycomputer-drive {
+    width:96px; display:flex; flex-direction:column; align-items:center;
+    gap:4px; padding:8px 4px; border:1px solid transparent; cursor:pointer;
+    border-radius:3px; font-family:Tahoma,sans-serif; font-size:11px; text-align:center;
+}
+.mycomputer-drive:hover { background:#ddeeff; border-color:#316ac5; }
+.mycomputer-drive:active { background:#c0d8ff; }
+.mycomputer-drive-icon { font-size:32px; line-height:1; }
+.mycomputer-drive-name { color:#1a1a1a; word-break:break-word; }
+.mycomputer-drive-info { color:#888; font-size:10px; }
+
+/* ===================== SETTINGS TABS ===================== */
+.settings-tabs { display:flex; border-bottom:2px solid #aca899; margin-bottom:8px; }
+.settings-tab {
+    padding:4px 12px; font-family:Tahoma,sans-serif; font-size:11px;
+    cursor:pointer; border:1px solid transparent; border-bottom:none;
+    background:#d4d0c8; color:#333; margin-bottom:-2px; border-radius:3px 3px 0 0;
+    position:relative;
+}
+.settings-tab:hover { background:#e0dcd4; }
+.settings-tab.active {
+    background:#ECE9D8; border-color:#aca899; z-index:1;
+    font-weight:bold; color:#000;
+}
+.settings-tab-content { display:none; }
+.settings-tab-content.active { display:block; }
