@@ -375,17 +375,25 @@ body {
 
 #start-btn {
     height: 32px; min-width: 90px;
-    background: linear-gradient(180deg, #4aad34 0%, #3a9c24 30%, #2d8a18 70%, #247010 100%);
+    background: linear-gradient(180deg,
+        #6eca44 0%, #4ab030 6%, #3a9c24 25%,
+        #2e8e18 60%, #237010 85%, #1a5808 100%);
     color: white; font-weight: bold; font-size: 13px;
-    font-family: Tahoma, sans-serif; font-style: italic;
+    font-family: 'Trebuchet MS', Tahoma, sans-serif; font-style: italic;
     border: 1px solid #1a6008; border-radius: 14px; cursor: pointer;
     display: flex; align-items: center; gap: 5px;
     padding: 0 12px 0 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px rgba(255,255,255,0.3);
+    box-shadow:
+        inset 0 1px 1px rgba(255,255,255,0.50),
+        inset -1px 0 1px rgba(0,0,0,0.20),
+        0 1px 3px rgba(0,0,0,0.45);
+    text-shadow: 0 1px 1px rgba(0,0,60,0.55);
     letter-spacing: 0.5px; flex-shrink: 0;
 }
 #start-btn:hover, #start-btn.active {
-    background: linear-gradient(180deg, #5abf40 0%, #48ae2e 30%, #389a1e 70%, #2a8014 100%);
+    background: linear-gradient(180deg,
+        #80d858 0%, #58be3c 6%, #46aa28 25%,
+        #389a1c 60%, #2a8012 85%, #1e6010 100%);
 }
 .start-logo { font-size: 16px; line-height: 1; font-style: normal; }
 
@@ -427,47 +435,54 @@ body {
 #start-menu {
     position: fixed; bottom: var(--taskbar-h); left: 0;
     width: 420px; background: white;
-    border: 1px solid #0030a0; border-radius: 8px 8px 0 0;
-    box-shadow: 4px -4px 16px rgba(0,0,0,0.5);
+    border: 2px solid #0c3898; border-radius: 6px 6px 0 0;
+    box-shadow: 4px -4px 20px rgba(0,0,80,0.5);
     z-index: 8999; overflow: hidden;
 }
 .sm-header {
-    background: linear-gradient(180deg, #1050c8 0%, #0840b0 100%);
-    padding: 8px 12px; display: flex; align-items: center; gap: 10px;
-    border-radius: 7px 7px 0 0;
+    background: linear-gradient(180deg, #1c5fc8 0%, #1248b0 50%, #0e40a8 100%);
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 2px solid #0a3890;
 }
 .sm-avatar {
     font-size: 28px; line-height: 1;
-    background: rgba(255,255,255,0.2); border-radius: 50%;
-    width: 42px; height: 42px;
+    background: rgba(255,255,255,0.15); border-radius: 50%;
+    width: 44px; height: 44px;
     display: flex; align-items: center; justify-content: center;
-    border: 2px solid rgba(255,255,255,0.5);
+    border: 2px solid #fff;
+    box-shadow: 0 0 5px rgba(0,0,80,0.4);
 }
-.sm-username { color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
+.sm-username {
+    color: white; font-weight: bold; font-size: 14px;
+    font-family: 'Trebuchet MS', Tahoma, sans-serif;
+    text-shadow: 1px 1px 3px rgba(0,0,80,0.5);
+}
 .sm-body { display: flex; min-height: 200px; position: relative; }
 .sm-left  { flex: 1; padding: 6px 0; border-right: 1px solid #c0c0c0; background: white; }
-.sm-right { flex: 1; padding: 6px 0; background: #f0eeec; }
+.sm-right { flex: 1; padding: 6px 0; background: #dce8f8; }
 .sm-item {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 14px; font-size: 12px; color: #1a1a1a; cursor: pointer; white-space: nowrap;
 }
-.sm-item:hover { background: linear-gradient(180deg, #2050c8 0%, #1840b0 100%); color: white; }
+.sm-item:hover { background: linear-gradient(180deg, #2166bd 0%, #1952a3 100%); color: white; }
+.sm-item:hover .sm-icon { color: white; }
 .sm-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
 .sm-separator { height: 1px; background: #c0c0c0; margin: 4px 8px; }
 .sm-footer {
-    background: linear-gradient(180deg, #d4d0c8 0%, #c0bbb0 100%);
-    padding: 6px 10px; display: flex; justify-content: flex-end;
-    border-top: 1px solid #a0a0a0;
+    background: linear-gradient(180deg, #1248b0 0%, #0c3898 100%);
+    padding: 8px 12px; display: flex; justify-content: flex-end;
+    border-top: 1px solid #0a3080;
 }
 .sm-shutdown-btn {
-    background: linear-gradient(180deg, #e0dcd4 0%, #c8c4bc 100%);
-    border: 1px solid #808080; border-radius: 3px;
-    padding: 4px 12px; font-size: 12px; cursor: pointer;
+    background: linear-gradient(180deg, #3a7ae0 0%, #2060c8 100%);
+    border: 1px solid #1040a0; border-radius: 3px;
+    padding: 4px 14px; font-size: 12px; cursor: pointer;
     display: flex; align-items: center; gap: 5px;
-    font-family: Tahoma, sans-serif;
-    box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+    font-family: 'Trebuchet MS', Tahoma, sans-serif;
+    color: #fff; text-shadow: 0 1px rgba(0,0,80,0.4);
+    box-shadow: inset 0 1px rgba(255,255,255,0.25), 0 1px 2px rgba(0,0,0,0.35);
 }
-.sm-shutdown-btn:hover { background: linear-gradient(180deg, #e8e4dc 0%, #d0ccc4 100%); }
+.sm-shutdown-btn:hover { background: linear-gradient(180deg, #4a8aec 0%, #2e6ed8 100%); }
 .sm-shutdown-icon { font-size: 14px; }
 
 /* ===================== CONTEXT MENU ===================== */
@@ -705,13 +720,17 @@ body {
 }
 .sm-back-btn:hover { background: #d4d0c8; color: #316ac5; }
 
+.sm-prog-folder-wrap { /* folder container */ }
 .sm-prog-folder-header {
     display: flex; align-items: center; gap: 6px;
-    padding: 6px 14px 4px 10px; font-size: 11px;
-    font-weight: bold; color: #333;
-    background: #f5f4f0; border-top: 1px solid #e0ddd8;
-    cursor: default;
+    padding: 5px 14px 5px 10px; font-size: 12px;
+    font-weight: bold; color: #1a1a1a;
+    background: #f0eeec; border-bottom: 1px solid #d8d4cc;
+    cursor: pointer; user-select: none;
 }
+.sm-prog-folder-header:hover { background: #d4d0c8; color: #316ac5; }
+.sm-prog-folder-arrow { margin-left: auto; font-size: 10px; color: #555; }
+.sm-prog-folder-body { /* children wrapper */ }
 
 .sm-prog-item {
     display: flex; align-items: center; gap: 8px;
@@ -721,6 +740,17 @@ body {
 .sm-prog-item-indent { padding-left: 28px; }
 .sm-prog-item:hover { background: linear-gradient(180deg, #2050c8 0%, #1840b0 100%); color: white; }
 .sm-prog-favicon { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+.sm-prog-no-icon { width: 16px; height: 16px; font-size: 13px; flex-shrink: 0; display: inline-flex; align-items: center; }
+
+/* ===================== BOOKMARKS TREE ===================== */
+.bkmarks-tree-item {
+    display: flex; align-items: center;
+    padding: 3px 8px; cursor: pointer;
+    font-size: 11px; color: #1a1a1a;
+    white-space: nowrap; user-select: none;
+}
+.bkmarks-tree-item:hover { background: #c8d8f0; }
+.bkmarks-tree-item.selected { background: #316ac5; color: #fff; }
 
 /* ===================== MULTI-SELECTION ===================== */
 /* Rubber-band marquee rectangle */
@@ -1165,6 +1195,18 @@ body {
     width:1px; height:28px; flex-shrink:0; margin:0 3px;
     background:linear-gradient(180deg,#0a2060 0%,#2050b0 50%,#0a2060 100%);
     border-left:1px solid #061540; border-right:1px solid #3060c0;
+}
+
+/* ===================== TRAY UPDATE ===================== */
+#tray-update {
+    font-size:14px; cursor:pointer; padding:0 5px; line-height:30px;
+    border-radius:2px; user-select:none;
+    animation: tray-update-pulse 1.8s ease-in-out infinite;
+}
+#tray-update:hover { background:rgba(255,255,255,0.15); }
+@keyframes tray-update-pulse {
+    0%, 100% { opacity:1; }
+    50%       { opacity:0.45; }
 }
 
 /* ===================== TRAY VOLUME ===================== */

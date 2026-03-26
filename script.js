@@ -2418,6 +2418,7 @@ function startMenuAction(a) {
         case 'recycle':    openRecycleBin();  break; case 'setbg':      document.getElementById('bg-upload').click(); break;
         case 'removebg':   localStorage.removeItem(STORAGE.bg); applyBackground(); break;
         case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
+        case 'update':     checkForUpdates(false); break;
         case 'shutdown':   openShutdownDialog(); break;
     }
 }
@@ -2428,31 +2429,77 @@ function openAllPrograms() {
     const list  = document.getElementById('sm-programs-list');
     if (!panel || !list) return;
     list.innerHTML = '';
-    links.forEach(function(item) {
-        if (item.isFolder) {
-            const hdr = document.createElement('div');
-            hdr.className = 'sm-prog-folder-header';
-            hdr.innerHTML =
-                '<svg width="16" height="14" viewBox="0 0 48 40" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">' +
-                  '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1"/>' +
-                  '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
-                '</svg>' +
-                '<span>' + escapeHtml(item.name) + '</span>';
-            list.appendChild(hdr);
-            (item.items || []).forEach(function(child) {
-                list.appendChild(makeProgItem(child, true));
-            });
-        } else {
-            list.appendChild(makeProgItem(item, false));
-        }
+
+    // Папка: Игры
+    var gameItems = [
+        { name:'Сапёр',   action: function(){ closeStartMenu(); openMinesweeper(); } },
+        { name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
+        { name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
+        { name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
+    ];
+    list.appendChild(makeFolderBlock('🎮 Игры', gameItems, true));
+
+    // Папка: Программы — встроенные + ярлыки с рабочего стола
+    var builtins = [
+        { name:'Блокнот',          action: function(){ closeStartMenu(); openNotepad(); } },
+        { name:'WordPad',          action: function(){ closeStartMenu(); openWordPad(); } },
+        { name:'Paint',            action: function(){ closeStartMenu(); openPaint(); } },
+        { name:'Калькулятор',      action: function(){ closeStartMenu(); openCalculator(); } },
+        { name:'Командная строка', action: function(){ closeStartMenu(); openCmd(); } },
+        { name:'Диспетчер задач',  action: function(){ closeStartMenu(); openTaskManager(); } },
+    ];
+    var progItems = links.filter(function(i){ return !i.isFolder; }).map(function(i){
+        return { name: i.name, favicon: i.customIcon || getFaviconUrl(i.url),
+                 action: function(){ closeStartMenu(); navToUrl(i.url); } };
     });
+    list.appendChild(makeFolderBlock('📁 Программы', builtins.concat(progItems), false));
+
     panel.classList.remove('hidden');
 }
 
+function makeFolderBlock(title, items, openByDefault) {
+    var wrap = document.createElement('div');
+    wrap.className = 'sm-prog-folder-wrap';
+
+    var hdr = document.createElement('div');
+    hdr.className = 'sm-prog-folder-header';
+    hdr.innerHTML =
+        '<svg width="16" height="14" viewBox="0 0 48 40" style="flex-shrink:0">' +
+        '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1"/>' +
+        '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
+        '</svg><span>' + escapeHtml(title) + '</span>' +
+        '<span class="sm-prog-folder-arrow">' + (openByDefault ? '▾' : '▸') + '</span>';
+    wrap.appendChild(hdr);
+
+    var body = document.createElement('div');
+    body.className = 'sm-prog-folder-body';
+    if (!openByDefault) body.classList.add('hidden');
+
+    items.forEach(function(item){
+        var el = document.createElement('div');
+        el.className = 'sm-prog-item sm-prog-item-indent';
+        if (item.favicon) {
+            el.innerHTML = '<img class="sm-prog-favicon" src="' + escapeHtml(item.favicon) + '" alt="" onerror="this.style.display=\'none\'"><span>' + escapeHtml(item.name) + '</span>';
+        } else {
+            el.innerHTML = '<span class="sm-prog-no-icon">📄</span><span>' + escapeHtml(item.name) + '</span>';
+        }
+        el.addEventListener('click', item.action);
+        body.appendChild(el);
+    });
+    wrap.appendChild(body);
+
+    hdr.addEventListener('click', function(){
+        var isOpen = !body.classList.contains('hidden');
+        body.classList.toggle('hidden', isOpen);
+        wrap.querySelector('.sm-prog-folder-arrow').textContent = isOpen ? '▸' : '▾';
+    });
+    return wrap;
+}
+
 function makeProgItem(item, inFolder) {
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.className = 'sm-prog-item' + (inFolder ? ' sm-prog-item-indent' : '');
-    const fav = item.customIcon || getFaviconUrl(item.url);
+    var fav = item.customIcon || getFaviconUrl(item.url);
     el.innerHTML = '<img class="sm-prog-favicon" src="' + escapeHtml(fav) + '" alt=""><span>' + escapeHtml(item.name) + '</span>';
     el.addEventListener('click', function() { closeStartMenu(); navToUrl(item.url); });
     return el;
@@ -2855,6 +2902,7 @@ function openMyComputer() {
     const drives = document.createElement('div'); drives.className = 'mycomputer-drives';
     const driveItems = [
         {icon:'💾',name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){openLinksExplorer();}},
+        {icon:'📚',name:'Избранное (D:)',info:'Закладки браузера',action:function(){openBrowserBookmarks();}},
         {icon:'📝',name:'Документы',info:'WordPad',action:function(){openWordPad();}},
         {icon:'♻️',name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
         {icon:'💻',name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
@@ -2867,6 +2915,139 @@ function openMyComputer() {
     main.appendChild(drives);
     wrap.appendChild(sidebar); wrap.appendChild(main);
     wmCreate('mycomputer','Мой компьютер',wrap,540,360,'💻');
+}
+
+// ==================== BROWSER BOOKMARKS ====================
+function openBrowserBookmarks() {
+    if (wmWindows['bkmarks']) { wmRestore('bkmarks'); wmFocus('bkmarks'); return; }
+
+    var wrap = document.createElement('div'); wrap.className = 'xp-explorer';
+
+    // Toolbar / address bar
+    var tb = document.createElement('div'); tb.className = 'xp-explorer-toolbar';
+    var addr = document.createElement('div'); addr.className = 'xp-explorer-addr';
+    addr.innerHTML = '<span class="xp-explorer-addr-icon">📚</span><span id="bkmarks-addr-txt">D:\\Избранное</span>';
+    tb.appendChild(addr);
+    wrap.appendChild(tb);
+    var tbSep = document.createElement('div'); tbSep.className = 'xp-explorer-toolbar-sep';
+    wrap.appendChild(tbSep);
+
+    // Body
+    var body = document.createElement('div'); body.className = 'xp-explorer-body';
+
+    // Sidebar — folder tree
+    var sidebar = document.createElement('div'); sidebar.className = 'xp-explorer-sidebar';
+    var sbTitle = document.createElement('div'); sbTitle.className = 'xp-explorer-sb-title';
+    sbTitle.innerHTML = '📂 Папки';
+    sidebar.appendChild(sbTitle);
+    var treeEl = document.createElement('div'); treeEl.id = 'bkmarks-tree';
+    sidebar.appendChild(treeEl);
+
+    // Main — item list
+    var main = document.createElement('div'); main.className = 'xp-explorer-main';
+    var rowsEl = document.createElement('div'); rowsEl.className = 'xp-explorer-rows'; rowsEl.id = 'bkmarks-rows';
+    main.appendChild(rowsEl);
+    var statusEl = document.createElement('div'); statusEl.className = 'xp-explorer-status'; statusEl.id = 'bkmarks-status';
+    statusEl.textContent = 'Загрузка...';
+    main.appendChild(statusEl);
+
+    body.appendChild(sidebar); body.appendChild(main);
+    wrap.appendChild(body);
+
+    wmCreate('bkmarks', 'Избранное (D:)', wrap, 580, 420, '📚');
+
+    chrome.bookmarks.getTree(function(tree){
+        var roots = (tree[0] && tree[0].children) ? tree[0].children : [];
+        _renderBkmarksTree(treeEl, roots, rowsEl, statusEl);
+        if (roots.length > 0) _showBkmarksFolder(roots[0], rowsEl, statusEl, treeEl);
+    });
+}
+
+function _renderBkmarksTree(treeEl, nodes, rowsEl, statusEl) {
+    treeEl.innerHTML = '';
+    nodes.forEach(function(node){
+        if (node.url) return;
+        treeEl.appendChild(_makeBkmarksFolderRow(node, 0, treeEl, rowsEl, statusEl));
+    });
+}
+
+function _makeBkmarksFolderRow(node, depth, treeEl, rowsEl, statusEl) {
+    var wrap = document.createElement('div');
+
+    var row = document.createElement('div');
+    row.className = 'bkmarks-tree-item';
+    row.style.paddingLeft = (8 + depth * 14) + 'px';
+    row.innerHTML =
+        '<svg width="16" height="14" viewBox="0 0 48 40" style="flex-shrink:0;margin-right:5px">' +
+        '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
+        '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
+        '</svg><span>' + escapeHtml(node.title || '(без имени)') + '</span>';
+
+    row.addEventListener('click', function(e){
+        e.stopPropagation();
+        treeEl.querySelectorAll('.bkmarks-tree-item').forEach(function(r){ r.classList.remove('selected'); });
+        row.classList.add('selected');
+        _showBkmarksFolder(node, rowsEl, statusEl, treeEl);
+        var addrTxt = document.getElementById('bkmarks-addr-txt');
+        if (addrTxt) addrTxt.textContent = 'D:\\' + (node.title || '');
+    });
+    wrap.appendChild(row);
+
+    if (node.children) {
+        node.children.forEach(function(child){
+            if (!child.url) {
+                wrap.appendChild(_makeBkmarksFolderRow(child, depth + 1, treeEl, rowsEl, statusEl));
+            }
+        });
+    }
+    return wrap;
+}
+
+function _showBkmarksFolder(node, rowsEl, statusEl, treeEl) {
+    rowsEl.innerHTML = '';
+    var children = node.children || [];
+    var folders = children.filter(function(c){ return !c.url; });
+    var items   = children.filter(function(c){ return  !!c.url; });
+    var idx = 0;
+
+    folders.forEach(function(folder){
+        var row = document.createElement('div');
+        row.className = 'xp-explorer-row' + (idx++ % 2 === 1 ? ' even' : '');
+        row.innerHTML =
+            '<svg width="16" height="14" viewBox="0 0 48 40" class="xp-explorer-row-ico" style="flex-shrink:0">' +
+            '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
+            '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
+            '</svg>' +
+            '<span class="xp-explorer-row-name">' + escapeHtml(folder.title || '(без имени)') + '</span>' +
+            '<span class="xp-explorer-row-url" style="color:#888">Папка</span>';
+        row.addEventListener('dblclick', function(){
+            _showBkmarksFolder(folder, rowsEl, statusEl, treeEl);
+            var addrTxt = document.getElementById('bkmarks-addr-txt');
+            if (addrTxt) addrTxt.textContent = 'D:\\' + (folder.title || '');
+            treeEl.querySelectorAll('.bkmarks-tree-item').forEach(function(r){ r.classList.remove('selected'); });
+        });
+        rowsEl.appendChild(row);
+    });
+
+    items.forEach(function(item){
+        var row = document.createElement('div');
+        row.className = 'xp-explorer-row' + (idx++ % 2 === 1 ? ' even' : '');
+        var fav = getFaviconUrl(item.url);
+        row.innerHTML =
+            '<img class="xp-explorer-row-ico" src="' + escapeHtml(fav) + '" alt="" ' +
+            'style="width:16px;height:16px;object-fit:contain;flex-shrink:0" ' +
+            'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'🌐\',style:\'font-size:13px;flex-shrink:0;width:16px\'}))">' +
+            '<span class="xp-explorer-row-name">' + escapeHtml(item.title || item.url) + '</span>' +
+            '<span class="xp-explorer-row-url">' + escapeHtml(item.url) + '</span>';
+        row.addEventListener('click', function(){
+            rowsEl.querySelectorAll('.xp-explorer-row').forEach(function(r){ r.classList.remove('selected'); });
+            row.classList.add('selected');
+        });
+        row.addEventListener('dblclick', function(){ navToUrl(item.url); });
+        rowsEl.appendChild(row);
+    });
+
+    if (statusEl) statusEl.textContent = 'Объектов: ' + (folders.length + items.length);
 }
 
 // ==================== STICKY NOTES ====================
@@ -4726,6 +4907,118 @@ document.getElementById('bg-upload').addEventListener('change',function(e){
     const r=new FileReader();r.onload=function(ev){localStorage.setItem(STORAGE.bg,ev.target.result);applyBackground();};r.readAsDataURL(file);e.target.value='';
 });
 
+// ==================== UPDATER ====================
+const _UPD_MANIFEST = 'https://raw.githubusercontent.com/VibeCodeCrew/windows_xp_homepage/main/manifest.json';
+const _UPD_ZIP      = 'https://github.com/VibeCodeCrew/windows_xp_homepage/archive/refs/heads/main.zip';
+let   _updateAvail  = null; // { current, remote } when update found
+
+function _verGt(a, b) {
+    const av = String(a).split('.').map(Number);
+    const bv = String(b).split('.').map(Number);
+    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+        const d = (av[i]||0) - (bv[i]||0);
+        if (d > 0) return true;
+        if (d < 0) return false;
+    }
+    return false;
+}
+
+async function checkForUpdates(silent) {
+    try {
+        const resp = await fetch(_UPD_MANIFEST + '?_nc=' + Date.now());
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const remote = await resp.json();
+        const local  = chrome.runtime.getManifest().version;
+        const trayUpd = document.getElementById('tray-update');
+        if (_verGt(remote.version, local)) {
+            _updateAvail = { current: local, remote: remote.version };
+            if (trayUpd) trayUpd.classList.remove('hidden');
+            if (silent) {
+                showNotification('Windows Update', 'Доступна версия ' + remote.version + ' (сейчас ' + local + ')', '🔔', 7000);
+            } else {
+                openUpdateDialog(local, remote.version);
+            }
+        } else {
+            _updateAvail = null;
+            if (trayUpd) trayUpd.classList.add('hidden');
+            if (!silent) {
+                showNotification('Windows Update', 'Установлена последняя версия (' + local + ')', '✅', 4000);
+            }
+        }
+    } catch(e) {
+        if (!silent) showNotification('Windows Update', 'Ошибка проверки: ' + e.message, '⚠️', 5000);
+    }
+}
+
+function openUpdateDialog(currentVer, newVer) {
+    if (wmWindows['updater']) { wmRestore('updater'); wmFocus('updater'); return; }
+
+    const c = document.createElement('div');
+    c.style.cssText = 'display:flex;flex-direction:column;height:100%;font-family:Tahoma,sans-serif;font-size:11px;background:#fff;';
+
+    // Синяя шапка как в Windows Update
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'background:linear-gradient(90deg,#0050cc 0%,#1874e8 55%,#00aaff 100%);padding:12px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;';
+    hdr.innerHTML =
+        '<svg width="36" height="36" viewBox="0 0 36 36"><rect x="0" y="0" width="16" height="16" fill="#f35325"/><rect x="20" y="0" width="16" height="16" fill="#81bc06"/><rect x="0" y="20" width="16" height="16" fill="#05a6f0"/><rect x="20" y="20" width="16" height="16" fill="#ffba08"/></svg>' +
+        '<div>' +
+          '<div style="color:#fff;font-size:14px;font-weight:bold;font-family:\'Franklin Gothic Medium\',Tahoma,sans-serif;">Windows Update</div>' +
+          '<div style="color:#b8d8ff;font-size:11px;margin-top:2px;">Доступна новая версия Nostalgic Startpage</div>' +
+        '</div>';
+    c.appendChild(hdr);
+
+    // Белая полоска-разделитель (желтая как в XP update)
+    const strip = document.createElement('div');
+    strip.style.cssText = 'background:#fff8c0;border-top:1px solid #e0c040;border-bottom:1px solid #e0c040;padding:5px 16px;font-size:11px;color:#604000;flex-shrink:0;';
+    strip.innerHTML = '⚠️ &nbsp;Для завершения установки потребуется перезагрузить расширение вручную.';
+    c.appendChild(strip);
+
+    // Тело
+    const body = document.createElement('div');
+    body.style.cssText = 'flex:1;padding:14px 16px;overflow-y:auto;';
+    body.innerHTML =
+        '<table style="border-collapse:collapse;width:100%;margin-bottom:12px;">' +
+          '<tr><td style="padding:3px 8px 3px 0;color:#666;white-space:nowrap;">Установленная версия:</td>' +
+              '<td style="padding:3px 0;font-weight:bold;">' + escapeHtml(String(currentVer)) + '</td></tr>' +
+          '<tr><td style="padding:3px 8px 3px 0;color:#666;white-space:nowrap;">Доступная версия:</td>' +
+              '<td style="padding:3px 0;font-weight:bold;color:#0050cc;">' + escapeHtml(String(newVer)) + '</td></tr>' +
+        '</table>' +
+        '<div style="background:#eef4ff;border:1px solid #90b8f0;border-radius:2px;padding:10px 12px;">' +
+          '<b style="display:block;margin-bottom:6px;">Как установить обновление:</b>' +
+          '<ol style="margin:0;padding-left:18px;line-height:1.8;">' +
+            '<li>Нажмите <b>«Скачать»</b> — загрузится ZIP-архив</li>' +
+            '<li>Распакуйте архив <b>поверх</b> папки расширения</li>' +
+            '<li>Откройте <b style="font-family:monospace;">chrome://extensions</b></li>' +
+            '<li>Нажмите кнопку 🔄 «Обновить» рядом с расширением</li>' +
+          '</ol>' +
+        '</div>';
+    c.appendChild(body);
+
+    // Кнопки
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;justify-content:flex-end;gap:6px;padding:8px 12px;background:#ECE9D8;border-top:1px solid #aca899;flex-shrink:0;';
+    const dlBtn = document.createElement('button'); dlBtn.className = 'xp-dialog-btn xp-dialog-btn-primary';
+    dlBtn.textContent = '⬇️ Скачать обновление';
+    const laterBtn = document.createElement('button'); laterBtn.className = 'xp-dialog-btn';
+    laterBtn.textContent = 'Позже';
+    const extBtn = document.createElement('button'); extBtn.className = 'xp-dialog-btn';
+    extBtn.textContent = '🔧 chrome://extensions';
+    btns.appendChild(dlBtn); btns.appendChild(extBtn); btns.appendChild(laterBtn);
+    c.appendChild(btns);
+
+    wmCreate('updater', 'Windows Update', c, 420, 320, '🔄');
+
+    dlBtn.addEventListener('click', function() {
+        chrome.downloads.download({ url: _UPD_ZIP, filename: 'nostalgic-startpage-update.zip' });
+        dlBtn.textContent = '✅ Загружается...'; dlBtn.disabled = true;
+        showNotification('Windows Update', 'Загрузка начата. После завершения распакуйте поверх папки расширения.', '⬇️', 7000);
+    });
+    extBtn.addEventListener('click', function() {
+        chrome.tabs.create({ url: 'chrome://extensions' });
+    });
+    laterBtn.addEventListener('click', function() { wmClose('updater'); });
+}
+
 // ==================== SCREENSAVER ====================
 let ssTimer = null, ssActive = false, ssEl = null;
 
@@ -4968,6 +5261,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // Volume icon click
     const trayVol = document.getElementById('tray-volume');
     if (trayVol) trayVol.addEventListener('click', function(e){ e.stopPropagation(); toggleVolumePopup(); });
+
+    // Update tray icon click
+    const trayUpd = document.getElementById('tray-update');
+    if (trayUpd) trayUpd.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (_updateAvail) openUpdateDialog(_updateAvail.current, _updateAvail.remote);
+        else checkForUpdates(false);
+    });
+    // Проверка обновлений при старте (тихая) и раз в 2 часа
+    setTimeout(function(){ checkForUpdates(true); }, 5000);
+    setInterval(function(){ checkForUpdates(true); }, 2 * 60 * 60 * 1000);
 
     // 5 быстрых кликов по часам = BSOD
     let clockClicks = 0, clockTimer = null;

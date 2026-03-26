@@ -8,7 +8,8 @@
     "favicon",
     "storage",
     "windows",
-    "history"
+    "history",
+    "downloads"
   ],
   "background": {
     "service_worker": "background.js"
