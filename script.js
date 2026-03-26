@@ -787,7 +787,7 @@ function renderDesktop() {
         container.appendChild(icon);
     });
 
-    container.appendChild(createAddButton());
+    var _addBtnEl = createAddButton(); if (_addBtnEl) container.appendChild(_addBtnEl);
     SYSTEM_ICONS_DEF.forEach(function(def, i) { container.appendChild(createSystemIcon(def, i)); });
 
     // Hide glass search bar
@@ -880,14 +880,13 @@ function renderGlassGrid() {
         }
     });
 
-    // Add button
+    // Кнопка «Создать» в конце сетки
     var addBtn = document.createElement('div');
     addBtn.className = 'glass-grid-tile glass-grid-add';
-    addBtn.innerHTML = '<span class="glass-grid-add-plus">+</span><span class="glass-grid-label">\u0421\u043e\u0437\u0434\u0430\u0442\u044c</span>';
+    addBtn.innerHTML = '<span class="glass-grid-add-plus">+</span><span class="glass-grid-label">Создать</span>';
     addBtn.addEventListener('click', function() { openAddDialog(null); });
-    // Allow drop onto add-btn area (reorder to end)
-    addBtn.addEventListener('dragover', function(e) { e.preventDefault(); addBtn.classList.add('glass-drag-over'); });
-    addBtn.addEventListener('dragleave', function() { addBtn.classList.remove('glass-drag-over'); });
+    addBtn.addEventListener('dragover',  function(e) { e.preventDefault(); addBtn.classList.add('glass-drag-over'); });
+    addBtn.addEventListener('dragleave', function()  { addBtn.classList.remove('glass-drag-over'); });
     addBtn.addEventListener('drop', function(e) {
         e.preventDefault(); addBtn.classList.remove('glass-drag-over');
         if (glassDragIndex !== null) {
@@ -897,9 +896,9 @@ function renderGlassGrid() {
             glassDragIndex = null;
             saveAndRender();
         }
-        // External drops bubble to #desktop handler
     });
     grid.appendChild(addBtn);
+
 }
 
 function createGlassGridLink(item, index) {
@@ -1261,118 +1260,9 @@ function createFolderIconXP(item, index) {
 }
 
 // ---- Add button ----
-function createAddButton() {
-    const dim = getIconDim(null);
-    const savedPos = (function() {
-        try { return JSON.parse(localStorage.getItem(STORAGE.addBtnPos)); } catch(e) { return null; }
-    })();
-
-    let btn;
-    if (settings.viewMode === 'window') {
-        btn = document.createElement('div');
-        btn.className = 'desktop-icon xp-tile-window add-btn-tile';
-
-        const tb = document.createElement('div');
-        tb.className = 'tile-titlebar';
-        tb.innerHTML =
-            '<span style="font-size:12px;line-height:1;flex-shrink:0">+</span>' +
-            '<span class="tile-name">Создать</span>' +
-            '<div class="tile-btns">' +
-              '<button class="tile-btn tile-btn-min" style="opacity:.4;cursor:default">&#8211;</button>' +
-              '<button class="tile-btn tile-btn-max" style="opacity:.4;cursor:default">&#9633;</button>' +
-            '</div>';
-
-        const tc = document.createElement('div');
-        tc.className = 'tile-content add-btn-content';
-        tc.style.height = (settings.tileHeight) + 'px';
-        tc.innerHTML =
-            '<div class="add-btn-plus">+</div>' +
-            '<div class="add-btn-hint">Ярлык или папку</div>';
-
-        btn.appendChild(tb);
-        btn.appendChild(tc);
-        btn.style.cssText = 'position:absolute; width:' + dim.w + 'px;';
-
-        function openCreate(e) {
-            if (btn._wasDragged) { btn._wasDragged = false; return; }
-            openAddDialog(null);
-        }
-        tb.addEventListener('click', openCreate);
-        tc.addEventListener('click', openCreate);
-        tb.querySelector('.tile-btn-min').addEventListener('click', function(e) { e.stopPropagation(); });
-        tb.querySelector('.tile-btn-max').addEventListener('click', function(e) { e.stopPropagation(); });
-        tb.querySelector('.tile-btns').addEventListener('mousedown', function(e) { e.stopPropagation(); });
-    } else {
-        btn = document.createElement('div');
-        btn.className = 'desktop-icon add-btn-icon';
-        btn.style.cssText = 'position:absolute;';
-        btn.innerHTML =
-            '<div class="add-btn-icon-plus">+</div>' +
-            '<div class="add-btn-label">Создать</div>';
-        btn.addEventListener('click', function() {
-            if (btn._wasDragged) { btn._wasDragged = false; return; }
-            openAddDialog(null);
-        });
-    }
-
-    // Place: use saved position (with proportional scaling) or bottom-right corner
-    if (savedPos) {
-        const desktop = document.getElementById('desktop');
-        const cw = desktop ? desktop.offsetWidth  : 1200;
-        const ch = desktop ? desktop.offsetHeight : 800;
-        const refW = savedPos.dw || cw;
-        const refH = savedPos.dh || ch;
-        btn.style.left = (savedPos.x * (cw / refW)) + 'px';
-        btn.style.top  = (savedPos.y * (ch / refH)) + 'px';
-    } else {
-        btn.style.right  = '12px';
-        btn.style.bottom = '12px';
-    }
-
-    // Draggable
-    btn.addEventListener('mousedown', function(e) {
-        if (e.button !== 0) return;
-        if (e.target.closest('.tile-btns')) return;
-        e.preventDefault();
-        const iX = btn.offsetLeft, iY = btn.offsetTop;
-        const startX = e.clientX, startY = e.clientY;
-        let moved = false;
-
-        function onMove(e) {
-            const dx = e.clientX - startX, dy = e.clientY - startY;
-            if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
-            if (!moved) { btn.style.right = ''; btn.style.bottom = ''; moved = true; }
-            btn.classList.add('dragging');
-            const desktop = document.getElementById('desktop');
-            let x = iX + dx, y = iY + dy;
-            x = Math.max(0, Math.min(x, (desktop ? desktop.offsetWidth  : 1200) - btn.offsetWidth));
-            y = Math.max(0, Math.min(y, (desktop ? desktop.offsetHeight : 800)  - btn.offsetHeight));
-            btn.style.left = x + 'px'; btn.style.top = y + 'px';
-        }
-        function onUp(e) {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            btn.classList.remove('dragging');
-            if (moved) {
-                const dx = e.clientX - startX, dy = e.clientY - startY;
-                const desktop = document.getElementById('desktop');
-                const dw = desktop ? desktop.offsetWidth  : 1200;
-                const dh = desktop ? desktop.offsetHeight : 800;
-                let x = iX + dx, y = iY + dy;
-                x = Math.max(0, Math.min(x, dw - btn.offsetWidth));
-                y = Math.max(0, Math.min(y, dh - btn.offsetHeight));
-                if (settings.snapToGrid) { x = Math.round(x / SNAP_TILE) * SNAP_TILE; y = Math.round(y / SNAP_TILE) * SNAP_TILE; }
-                localStorage.setItem(STORAGE.addBtnPos, JSON.stringify({ x: x, y: y, dw: dw, dh: dh }));
-                btn.style.left = x + 'px'; btn.style.top = y + 'px';
-                btn._wasDragged = true;
-            }
-        }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    });
-
-    return btn;
-}
+// Кнопка «Создать» существует только в glass-grid (renderGlassGrid).
+// В window-mode и icon-mode не отображается.
+function createAddButton() { return null; }
 
 // ==================== SYSTEM ICONS ====================
 const SYSTEM_ICONS_DEF = [

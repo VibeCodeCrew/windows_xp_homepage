@@ -254,14 +254,13 @@ body {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    border: 2px dashed rgba(80,80,80,0.5);
+    border: none;
     background: rgba(255,255,255,0.08);
     cursor: pointer;
     height: 100%;
 }
 .add-btn-content:hover {
     background: rgba(255,255,255,0.18);
-    border-color: rgba(80,80,80,0.7);
 }
 
 .add-btn-plus {
@@ -1087,9 +1086,9 @@ body {
 /* Add tile */
 .glass-grid-add {
   background: rgba(255, 255, 255, calc(var(--glass-opacity) * 0.5));
-  border: 2px dashed rgba(255, 255, 255, 0.8);
+  border: none;
   font-size: 32px;
-  color: #333;
+  color: #555;
   cursor: pointer;
   box-shadow: none;
 }
