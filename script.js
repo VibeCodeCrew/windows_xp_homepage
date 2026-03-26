@@ -2725,43 +2725,114 @@ function openTaskManager() {
 // ==================== LINKS EXPLORER ====================
 function openLinksExplorer() {
     if (wmWindows['links']) { wmRestore('links'); wmFocus('links'); return; }
-    const c = document.createElement('div');
-    c.style.cssText = 'display:flex;flex-direction:column;height:100%;font-family:Tahoma,sans-serif;font-size:11px;';
-    const addr = document.createElement('div');
-    addr.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px;background:#ECE9D8;border-bottom:1px solid #aca899;font-size:11px;';
-    addr.innerHTML = '<span>💾</span><span>Мои ярлыки (C:)</span>';
-    c.appendChild(addr);
-    const list = document.createElement('div');
-    list.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
+
+    const c = document.createElement('div'); c.className = 'xp-explorer';
+    let selectedIdx = -1;
+
+    // --- Toolbar ---
+    const tb = document.createElement('div'); tb.className = 'xp-explorer-toolbar';
+    const backBtn = document.createElement('button'); backBtn.className = 'xp-explorer-tb-btn'; backBtn.title = 'Назад';
+    backBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 2L4 7l5 5" stroke="#333" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Назад</span>';
+    backBtn.disabled = true;
+    const addrBar = document.createElement('div'); addrBar.className = 'xp-explorer-addr';
+    addrBar.innerHTML = '<span class="xp-explorer-addr-icon">💾</span><span>Мои ярлыки (C:\\)</span>';
+    tb.appendChild(backBtn); tb.appendChild(addrBar); c.appendChild(tb);
+
+    // --- Separator ---
+    const sep = document.createElement('div'); sep.className = 'xp-explorer-toolbar-sep'; c.appendChild(sep);
+
+    // --- Body: sidebar + list ---
+    const body = document.createElement('div'); body.className = 'xp-explorer-body'; c.appendChild(body);
+
+    // Sidebar
+    const sidebar = document.createElement('div'); sidebar.className = 'xp-explorer-sidebar';
+    const sbTitle = document.createElement('div'); sbTitle.className = 'xp-explorer-sb-title';
+    sbTitle.innerHTML = '<span>🔗</span> Действия';
+    sidebar.appendChild(sbTitle);
+    function mkSbBtn(label, fn) {
+        const btn = document.createElement('div'); btn.className = 'xp-explorer-sb-item';
+        btn.textContent = label;
+        btn.addEventListener('click', fn);
+        sidebar.appendChild(btn);
+    }
+    mkSbBtn('🌐 Открыть', function() {
+        if (selectedIdx < 0 || !links[selectedIdx]) return;
+        chrome.tabs.create({ url: links[selectedIdx].url });
+    });
+    mkSbBtn('✏️ Переименовать', function() {
+        if (selectedIdx < 0 || !links[selectedIdx]) return;
+        const item = links[selectedIdx];
+        const newName = prompt('Новое название:', item.name);
+        if (newName && newName.trim()) { item.name = newName.trim(); saveLinks(); renderList(); }
+    });
+    mkSbBtn('🗑️ Удалить', function() {
+        if (selectedIdx < 0 || !links[selectedIdx]) return;
+        const item = links[selectedIdx];
+        item.deletedAt = Date.now();
+        trashedLinks.push(item);
+        localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks));
+        links.splice(selectedIdx, 1);
+        selectedIdx = -1;
+        saveAndRender(); renderList();
+    });
+    body.appendChild(sidebar);
+
+    // File list
+    const main = document.createElement('div'); main.className = 'xp-explorer-main';
+
+    // Column headers
+    const hdr = document.createElement('div'); hdr.className = 'xp-explorer-hdr';
+    hdr.innerHTML = '<div class="xp-explorer-hdr-name">Имя</div><div class="xp-explorer-hdr-url">Адрес</div>';
+    main.appendChild(hdr);
+
+    const rows = document.createElement('div'); rows.className = 'xp-explorer-rows';
+
     function renderList() {
-        list.innerHTML = '';
+        rows.innerHTML = '';
+        selectedIdx = -1;
         if (!links.length) {
-            list.innerHTML = '<div style="color:#999;padding:12px;">Ярлыков нет</div>';
+            rows.innerHTML = '<div style="padding:16px;color:#666;font-family:Tahoma,sans-serif;font-size:11px;">Ярлыков нет. Добавьте их через рабочий стол.</div>';
             return;
         }
-        links.forEach(function(item) {
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:2px;';
-            row.onmouseenter = function(){ row.style.background='#d0d8f0'; };
-            row.onmouseleave = function(){ row.style.background=''; };
+        links.forEach(function(item, i) {
+            if (item.isFolder) return; // пропускаем папки
+            const row = document.createElement('div'); row.className = 'xp-explorer-row';
+            if (i % 2 === 0) row.classList.add('even');
+
             const ico = document.createElement('img');
+            ico.className = 'xp-explorer-row-ico';
             ico.src = 'chrome-extension://'+chrome.runtime.id+'/_favicon/?pageUrl='+encodeURIComponent(item.url)+'&size=16';
             ico.onerror = function(){ ico.style.visibility='hidden'; };
-            ico.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
-            const name = document.createElement('span');
-            name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-            name.textContent = item.name || item.url;
-            const url = document.createElement('span');
-            url.style.cssText = 'color:#666;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-            url.textContent = item.url;
-            row.appendChild(ico); row.appendChild(name); row.appendChild(url);
-            row.addEventListener('click', function(){ chrome.tabs.create({ url: item.url }); });
-            list.appendChild(row);
+
+            const nameCell = document.createElement('div'); nameCell.className = 'xp-explorer-row-name';
+            nameCell.textContent = item.name || item.url;
+
+            const urlCell = document.createElement('div'); urlCell.className = 'xp-explorer-row-url';
+            urlCell.textContent = item.url;
+
+            row.appendChild(ico); row.appendChild(nameCell); row.appendChild(urlCell);
+
+            row.addEventListener('click', function() {
+                rows.querySelectorAll('.xp-explorer-row').forEach(function(r){ r.classList.remove('selected'); });
+                row.classList.add('selected');
+                selectedIdx = i;
+            });
+            row.addEventListener('dblclick', function() {
+                chrome.tabs.create({ url: item.url });
+            });
+            rows.appendChild(row);
         });
     }
     renderList();
-    c.appendChild(list);
-    wmCreate('links', 'Мои ярлыки (C:)', c, 480, 320, '💾');
+    main.appendChild(rows);
+    body.appendChild(main);
+
+    // Status bar
+    const status = document.createElement('div'); status.className = 'xp-explorer-status';
+    status.textContent = 'Объектов: ' + links.filter(function(l){ return !l.isFolder; }).length;
+    c.appendChild(status);
+
+    wmCreate('links', 'Избранное', c, 560, 360, '💾');
 }
 
 // ==================== MY COMPUTER ====================
