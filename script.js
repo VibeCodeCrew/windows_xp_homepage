@@ -213,13 +213,56 @@ function triggerBSOD() {
         'assistance.',
     ].join('\n');
     document.body.appendChild(bsod);
+    playSound('error');
     minesweeperLosses = 0;
-    // "Reboot" after 8 seconds
+    // После BSOD — экран загрузки XP, затем звук запуска
     setTimeout(function() {
-        bsod.style.transition = 'opacity 0.4s';
+        bsod.style.transition = 'opacity 0.3s';
         bsod.style.opacity = '0';
-        setTimeout(function() { bsod.remove(); }, 400);
+        setTimeout(function() {
+            bsod.remove();
+            showXPBoot(function() {
+                playSound('startup');
+            });
+        }, 300);
     }, 8000);
+}
+
+function showXPBoot(onDone) {
+    const boot = document.createElement('div');
+    boot.id = 'xp-boot-screen';
+    boot.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99998;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    boot.innerHTML =
+        '<div style="display:flex;align-items:center;gap:18px;margin-bottom:40px;">' +
+        '<svg width="48" height="48" viewBox="0 0 48 48"><rect x="0" y="0" width="22" height="22" fill="#f35325"/><rect x="26" y="0" width="22" height="22" fill="#81bc06"/><rect x="0" y="26" width="22" height="22" fill="#05a6f0"/><rect x="26" y="26" width="22" height="22" fill="#ffba08"/></svg>' +
+        '<div><div style="color:#fff;font-family:\'Franklin Gothic Medium\',\'Arial Narrow\',Arial,sans-serif;font-size:36px;font-weight:300;letter-spacing:1px;">Windows<span style="font-style:italic;"> XP</span></div>' +
+        '<div style="color:#ccc;font-family:Tahoma,sans-serif;font-size:11px;letter-spacing:2px;">Professional</div></div>' +
+        '</div>' +
+        '<div id="xp-boot-bar" style="width:180px;height:14px;background:#111;border:1px solid #333;border-radius:2px;overflow:hidden;position:relative;">' +
+        '<div id="xp-boot-progress" style="height:100%;width:0;background:linear-gradient(180deg,#3a8cf4 0%,#0555ee 100%);transition:none;"></div>' +
+        '</div>' +
+        '<div style="color:#aaa;font-family:Tahoma,sans-serif;font-size:10px;margin-top:10px;">Microsoft Corporation</div>';
+    document.body.appendChild(boot);
+
+    // Анимация progress bar — блоки двигаются справа налево как в XP
+    let step = 0;
+    const totalSteps = 18;
+    const barEl = boot.querySelector('#xp-boot-progress');
+    const barTimer = setInterval(function() {
+        step++;
+        // Бегущий блок: ширина ~30%, смещение по синусу
+        const pos = (step / totalSteps) * 100;
+        barEl.style.width = Math.min(pos, 100) + '%';
+        if (step >= totalSteps) clearInterval(barTimer);
+    }, 160);
+
+    setTimeout(function() {
+        clearInterval(barTimer);
+        boot.style.transition = 'opacity 0.5s';
+        boot.style.opacity = '0';
+        if (onDone) onDone();
+        setTimeout(function() { boot.remove(); }, 500);
+    }, totalSteps * 160 + 400);
 }
 
 // ==================== CLOCK ====================
@@ -247,8 +290,6 @@ function _getAudio() {
 function playSound(type) {
     const a = _getAudio(); if (!a) return;
     const ctx = a.ctx, master = a.gain;
-    const g = ctx.createGain(); g.connect(master);
-    const o = ctx.createOscillator(); o.connect(g);
     const t = ctx.currentTime;
     function tone(freq, startT, dur, wave, vol) {
         const og = ctx.createGain(); og.connect(master);
@@ -259,7 +300,6 @@ function playSound(type) {
         og.gain.exponentialRampToValueAtTime(0.0001, t + startT + dur);
         oo.start(t + startT); oo.stop(t + startT + dur + 0.02);
     }
-    o.stop(t); // never used, just init pattern
     switch(type) {
         case 'open':     tone(523, 0, 0.07); tone(659, 0.06, 0.07); break;
         case 'close':    tone(659, 0, 0.07); tone(440, 0.06, 0.09); break;
@@ -290,7 +330,9 @@ function showNotification(title, text, icon, duration) {
         '<div class="xp-balloon-text">' + escapeHtml(text) + '</div>' +
         '<span class="xp-balloon-close">\u2715</span>';
     document.body.appendChild(el);
+    let _removed = false;
     function remove() {
+        if (_removed) return; _removed = true;
         _balloonOffset = Math.max(0, _balloonOffset - 72);
         el.style.opacity = '0'; el.style.transition = 'opacity 0.2s';
         setTimeout(function() { if (el.parentNode) el.remove(); }, 220);
@@ -2537,6 +2579,7 @@ function openRun() {
     document.body.appendChild(acEl);
     let acItems=[], acFocused=-1;
     function acHide(){acEl.style.display='none';acItems=[];acFocused=-1;}
+    function acDestroy(){acEl.remove();}
     function acPos(){const r=inp.getBoundingClientRect();acEl.style.left=r.left+'px';acEl.style.top=r.bottom+'px';acEl.style.width=r.width+'px';}
     inp.addEventListener('input',function(){
         const q=inp.value.trim(); if(!q){acHide();return;}
@@ -2572,13 +2615,16 @@ function openRun() {
     ok.addEventListener('click',function(){
         acHide(); let url=inp.value.trim(); if(!url)return;
         if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
-        window.open(url,'_blank'); wmClose('run');
+        acDestroy(); window.open(url,'_blank'); wmClose('run');
     });
-    cn.addEventListener('click',function(){acHide();wmClose('run');});
-    const w=wmWindows['run']; if(w)w.el.addEventListener('keydown',function(e){
-        if(e.key==='Enter'&&!(acEl.style.display!=='none'&&acFocused>=0))ok.click();
-        if(e.key==='Escape'){acHide();wmClose('run');}
-    });
+    cn.addEventListener('click',function(){acDestroy();wmClose('run');});
+    const w=wmWindows['run']; if(w){
+        const xBtn=w.el.querySelector('.xp-btn-close'); if(xBtn)xBtn.addEventListener('click',acDestroy);
+        w.el.addEventListener('keydown',function(e){
+            if(e.key==='Enter'&&!(acEl.style.display==='block'&&acFocused>=0))ok.click();
+            if(e.key==='Escape'){acDestroy();wmClose('run');}
+        });
+    }
 }
 
 // ==================== TASK MANAGER ====================
@@ -2629,7 +2675,7 @@ function openTaskManager() {
             const tr=document.createElement('tr'); tr.style.cursor='default';
             tr.innerHTML='<td style="padding:2px 6px;">'+ escapeHtml(title) +'</td><td style="padding:2px 6px;color:#006600;">Работает</td><td style="padding:2px 6px;"></td>';
             const killBtn=document.createElement('button'); killBtn.className='xp-dialog-btn'; killBtn.textContent='Снять'; killBtn.style.cssText='min-width:0;padding:1px 6px;height:18px;font-size:10px;';
-            killBtn.addEventListener('click',function(){wmClose(id);refreshApps();});
+            killBtn.addEventListener('click',function(){wmClose(id);setTimeout(refreshApps,150);});
             tr.cells[2].appendChild(killBtn);
             tr.addEventListener('dblclick',function(){wmRestore(id);wmFocus(id);});
             tbl.appendChild(tr);
@@ -2676,6 +2722,48 @@ function openTaskManager() {
     },2000);
 }
 
+// ==================== LINKS EXPLORER ====================
+function openLinksExplorer() {
+    if (wmWindows['links']) { wmRestore('links'); wmFocus('links'); return; }
+    const c = document.createElement('div');
+    c.style.cssText = 'display:flex;flex-direction:column;height:100%;font-family:Tahoma,sans-serif;font-size:11px;';
+    const addr = document.createElement('div');
+    addr.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 8px;background:#ECE9D8;border-bottom:1px solid #aca899;font-size:11px;';
+    addr.innerHTML = '<span>💾</span><span>Мои ярлыки (C:)</span>';
+    c.appendChild(addr);
+    const list = document.createElement('div');
+    list.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
+    function renderList() {
+        list.innerHTML = '';
+        if (!links.length) {
+            list.innerHTML = '<div style="color:#999;padding:12px;">Ярлыков нет</div>';
+            return;
+        }
+        links.forEach(function(item) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:2px;';
+            row.onmouseenter = function(){ row.style.background='#d0d8f0'; };
+            row.onmouseleave = function(){ row.style.background=''; };
+            const ico = document.createElement('img');
+            ico.src = 'chrome-extension://'+chrome.runtime.id+'/_favicon/?pageUrl='+encodeURIComponent(item.url)+'&size=16';
+            ico.onerror = function(){ ico.style.visibility='hidden'; };
+            ico.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
+            const name = document.createElement('span');
+            name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            name.textContent = item.name || item.url;
+            const url = document.createElement('span');
+            url.style.cssText = 'color:#666;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            url.textContent = item.url;
+            row.appendChild(ico); row.appendChild(name); row.appendChild(url);
+            row.addEventListener('click', function(){ chrome.tabs.create({ url: item.url }); });
+            list.appendChild(row);
+        });
+    }
+    renderList();
+    c.appendChild(list);
+    wmCreate('links', 'Мои ярлыки (C:)', c, 480, 320, '💾');
+}
+
 // ==================== MY COMPUTER ====================
 function openMyComputer() {
     if (wmWindows['mycomputer']) { wmRestore('mycomputer'); wmFocus('mycomputer'); return; }
@@ -2695,7 +2783,7 @@ function openMyComputer() {
 
     const drives = document.createElement('div'); drives.className = 'mycomputer-drives';
     const driveItems = [
-        {icon:'💾',name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){wmClose('mycomputer');}},
+        {icon:'💾',name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){openLinksExplorer();}},
         {icon:'📝',name:'Документы',info:'WordPad',action:function(){openWordPad();}},
         {icon:'♻️',name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
         {icon:'💻',name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
@@ -4794,11 +4882,13 @@ document.addEventListener('DOMContentLoaded', function() {
     updateClock();
     setInterval(updateClock, 1000);
 
-    // Startup sound (one-time)
-    if (!sessionStorage.getItem('xp_started')) {
-        sessionStorage.setItem('xp_started', '1');
-        setTimeout(function() { playSound('startup'); }, 300);
-    }
+    // Quick Launch bindings (CSP-safe: no inline onclick)
+    [['ql-newtab', function(){chrome.tabs.create({});}],
+     ['ql-search', openSearch],
+     ['ql-mycomputer', openMyComputer],
+     ['ql-notepad', openNotepad],
+     ['ql-sticky', function(){ createSticky(); }]
+    ].forEach(function(b){ const el=document.getElementById(b[0]); if(el)el.addEventListener('click',b[1]); });
 
     // Calendar: click on tray-clock
     const trayClock = document.getElementById('tray-clock');

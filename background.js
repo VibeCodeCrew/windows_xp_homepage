@@ -130,9 +130,9 @@ async function resizeImage(src, width, height) {
     bitmap.close();
 
     const resultBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 });
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(resultBlob);
-    });
+    const buffer = await resultBlob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return 'data:image/jpeg;base64,' + btoa(binary);
 }
