@@ -1459,3 +1459,134 @@ body {
     border-top:1px solid #aca899; font-size:10px; color:#333;
     flex-shrink:0;
 }
+
+/* ===================== CLIPPY ===================== */
+#clippy-wrap {
+    position: fixed;
+    bottom: 50px; right: 20px;
+    z-index: 8800;
+    user-select: none;
+    cursor: grab;
+    filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.4));
+}
+#clippy-wrap:active { cursor: grabbing; }
+#clippy-svg { display: block; overflow: visible; }
+
+#clippy-bubble {
+    position: absolute;
+    bottom: 108%; right: 0;
+    width: 220px;
+    background: #ffffc8;
+    border: 1px solid #b8a000;
+    border-radius: 6px;
+    box-shadow: 3px 3px 10px rgba(0,0,0,0.3);
+    padding: 10px 26px 10px 12px;
+    font-family: Tahoma, sans-serif;
+    font-size: 12px; color: #1a1a1a; line-height: 1.4;
+    animation: clippy-bubble-in 0.18s ease-out;
+    z-index: 8801;
+}
+#clippy-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -11px; right: 18px;
+    border: 6px solid transparent;
+    border-top-color: #b8a000;
+}
+#clippy-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -9px; right: 19px;
+    border: 5px solid transparent;
+    border-top-color: #ffffc8;
+    z-index: 1;
+}
+#clippy-bubble-close {
+    position: absolute; top: 4px; right: 5px;
+    background: none; border: none; cursor: pointer;
+    font-size: 11px; color: #888; padding: 1px 4px;
+    line-height: 1;
+}
+#clippy-bubble-close:hover { color: #c00; background: rgba(0,0,0,0.06); border-radius: 2px; }
+#clippy-bubble-actions {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+}
+.clippy-action-btn {
+    background: linear-gradient(180deg, #e8e4dc 0%, #d0ccc4 100%);
+    border: 1px solid #a0a0a0; border-radius: 2px;
+    font-family: Tahoma, sans-serif; font-size: 10px;
+    padding: 2px 8px; cursor: pointer;
+    box-shadow: 0 1px rgba(255,255,255,0.6) inset;
+}
+.clippy-action-btn:hover { background: linear-gradient(180deg, #f0ece4 0%, #d8d4cc 100%); }
+.clippy-action-btn:active { background: linear-gradient(180deg, #c8c4bc 0%, #d8d4cc 100%); }
+
+/* ---- Анимации тела ---- */
+@keyframes clippy-idle {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    30%       { transform: translateY(-4px) rotate(1.5deg); }
+    70%       { transform: translateY(-2px) rotate(-1deg); }
+}
+@keyframes clippy-talk {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25%       { transform: translateY(-4px) rotate(2deg); }
+    75%       { transform: translateY(-2px) rotate(-1deg); }
+}
+@keyframes clippy-excited {
+    0%, 100% { transform: translateY(0) scale(1); }
+    20%       { transform: translateY(-16px) scale(1.1) rotate(5deg); }
+    40%       { transform: translateY(-6px) scale(0.95) rotate(-3deg); }
+    60%       { transform: translateY(-12px) scale(1.06) rotate(4deg); }
+    80%       { transform: translateY(-4px) scale(0.98) rotate(-2deg); }
+}
+@keyframes clippy-wave {
+    0%, 100% { transform: rotate(0deg); transform-origin: bottom center; }
+    15%       { transform: rotate(14deg); transform-origin: bottom center; }
+    35%       { transform: rotate(-10deg); transform-origin: bottom center; }
+    55%       { transform: rotate(12deg); transform-origin: bottom center; }
+    75%       { transform: rotate(-6deg); transform-origin: bottom center; }
+    90%       { transform: rotate(4deg); transform-origin: bottom center; }
+}
+@keyframes clippy-think {
+    0%, 100% { transform: rotate(0deg) translateX(0); }
+    40%       { transform: rotate(-7deg) translateX(-4px); }
+    80%       { transform: rotate(-4deg) translateX(-2px); }
+}
+@keyframes clippy-alert {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    15%       { transform: translateX(-6px) rotate(-3deg); }
+    35%       { transform: translateX(6px) rotate(3deg); }
+    55%       { transform: translateX(-4px) rotate(-2deg); }
+    75%       { transform: translateX(4px) rotate(2deg); }
+    90%       { transform: translateX(-2px); }
+}
+@keyframes clippy-sad {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50%       { transform: translateY(4px) rotate(-4deg); }
+}
+@keyframes clippy-blink-eyes {
+    0%, 88%, 100% { transform: scaleY(1); }
+    94%            { transform: scaleY(0.06); }
+}
+@keyframes clippy-bubble-in {
+    from { opacity: 0; transform: scale(0.82) translateY(10px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.clippy-anim-idle    { animation: clippy-idle    2.8s ease-in-out infinite; }
+.clippy-anim-talk    { animation: clippy-talk    0.55s ease-in-out infinite; }
+.clippy-anim-excited { animation: clippy-excited 0.65s ease-out 3; }
+.clippy-anim-wave    { animation: clippy-wave    1s ease-in-out 2; }
+.clippy-anim-think   { animation: clippy-think   1.6s ease-in-out infinite; }
+.clippy-anim-alert   { animation: clippy-alert   0.45s ease-in-out 2; }
+.clippy-anim-sad     { animation: clippy-sad     1.4s ease-in-out 2; }
+
+/* Моргание — применяется к <g> глаз */
+.clippy-blinking #clippy-eye-l,
+.clippy-blinking #clippy-eye-r { animation: clippy-blink-eyes 0.18s ease-in-out 1; }
+
+/* Взгляд */
+#clippy-face { transition: transform 0.25s ease; }
+.clippy-look-left  #clippy-face { transform: translateX(-3px); }
+.clippy-look-right #clippy-face { transform: translateX(3px); }
+.clippy-look-up    #clippy-face { transform: translateY(-3px); }

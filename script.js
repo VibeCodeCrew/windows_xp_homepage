@@ -92,7 +92,16 @@ function saveLinks() {
     }
     localStorage.setItem(STORAGE.tiles, JSON.stringify(links.map(strip)));
 }
-function saveAndRender() { saveLinks(); renderDesktop(); }
+function saveAndRender() {
+    saveLinks(); renderDesktop();
+    if (typeof clippySay === 'function' && typeof _clippyPrevLinksLen !== 'undefined') {
+        if (links.length > _clippyPrevLinksLen) {
+            if (links.length === 1) setTimeout(function(){ clippySay(CLIPPY_MSGS.react_created, 'wave'); }, 500);
+            else if (links.length > 5) setTimeout(function(){ clippySay(CLIPPY_MSGS.tip_general, 'think'); }, 600);
+        }
+        _clippyPrevLinksLen = links.length;
+    }
+}
 
 // ==================== SCREENSHOT STORAGE ====================
 const SS_PREFIX = 'ss_';
@@ -221,6 +230,7 @@ function triggerBSOD() {
         bsod.style.opacity = '0';
         setTimeout(function() {
             bsod.remove();
+            setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_bsod, 'alert'); }, 3000);
             showXPBoot(function() {
                 playSound('startup');
             });
@@ -1682,6 +1692,13 @@ function wmCreate(id, title, contentEl, width, height, icon) {
     tb.querySelector('.xp-btn-close').addEventListener('click', function(e) { e.stopPropagation(); wmClose(id); });
     tb.addEventListener('dblclick', function() { wmMaximize(id); });
     wmAddToTaskbar(id, title, icon); wmFocus(id);
+    if (typeof clippySay === 'function') {
+        if (CLIPPY_MSGS['app_' + id]) {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS['app_' + id], 'talk'); }, 800);
+        } else if (Object.keys(wmWindows).length >= 5) {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_many_windows, 'think'); }, 800);
+        }
+    }
     playSound('open');
     return win;
 }
@@ -3148,9 +3165,27 @@ function openSettings() {
     ssDelayInp.addEventListener('input',function(){const v=parseInt(ssDelayInp.value);ssDelayLbl.textContent=v+' мин';localStorage.setItem('edge_ss_delay',v);resetScreensaver();});
     ssPrevBtn.addEventListener('click',function(){wmClose('settings');startScreensaver();});
 
-    // --- Tab: Параметры --- (nothing new, just a note)
+    // --- Tab: Параметры ---
     const parP = tabPanels['params'];
     parP.innerHTML = '<div style="color:#666;font-size:11px;">Параметры режима отображения доступны во вкладке «Тема».</div>';
+    const clRow = document.createElement('div'); clRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:10px;';
+    const clChk = document.createElement('input'); clChk.type = 'checkbox'; clChk.id = 'settings-clippy-chk';
+    clChk.checked = _clippyEnabled;
+    clChk.addEventListener('change', function(){
+        _clippyEnabled = clChk.checked;
+        localStorage.setItem('edge_clippy_enabled', _clippyEnabled ? 'true' : 'false');
+        const existWrap = document.getElementById('clippy-wrap');
+        if (_clippyEnabled && !existWrap) { clippyInit(); }
+        else if (!_clippyEnabled && existWrap) {
+            clearTimeout(_clippyIdleTimer); clearTimeout(_clippyBlinkTimer);
+            clearTimeout(_clippyLookTimer); clearTimeout(_clippyAnimTimer);
+            existWrap.remove();
+        }
+    });
+    const clLbl = document.createElement('label'); clLbl.htmlFor = 'settings-clippy-chk';
+    clLbl.textContent = 'Показывать помощника Скрепку';
+    clLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
+    clRow.appendChild(clChk); clRow.appendChild(clLbl); parP.appendChild(clRow);
 
     wmCreate('settings', 'Свойства: Экран', c, 400, 340, '\u2699\uFE0F');
 }
@@ -3375,11 +3410,12 @@ function openMinesweeper() {
                 for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
                 rend(R,C); const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
                 minesweeperLosses++;
+                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_loss, 'sad'); }, 500);
                 if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
                 return;
             }
             reveal(r,cc,R,C); rend(R,C);
-            if (checkWin(R,C)) { won=true; clearInterval(tint); minesweeperLosses=0; const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E'; }
+            if (checkWin(R,C)) { won=true; clearInterval(tint); minesweeperLosses=0; const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E'; setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500); }
         });
 
         // Right-click: flag (prevent browser context menu)
@@ -3415,10 +3451,12 @@ function openMinesweeper() {
                 for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
                 const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
                 minesweeperLosses++;
+                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_loss, 'sad'); }, 500);
                 if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
             } else if (checkWin(R,C)) {
                 won=true; clearInterval(tint); minesweeperLosses=0;
                 const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E';
+                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500);
             }
             rend(R, C);
         });
@@ -4156,6 +4194,7 @@ function initSolitaire() {
             score += 500;
             const sc = document.getElementById('sol-score');
             if (sc) sc.textContent = 'Счёт: ' + score;
+            setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_solitaire_win, 'excited'); }, 500);
             startWinAnimation();
         }
     } // закрывающая скобка render()
@@ -4823,6 +4862,7 @@ async function checkForUpdates(silent) {
         if (_verGt(remote.version, local)) {
             _updateAvail = { current: local, remote: remote.version };
             if (trayUpd) trayUpd.classList.remove('hidden');
+            setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_update, 'excited'); }, 1000);
             if (silent) {
                 showNotification('Windows Update', 'Доступна версия ' + remote.version + ' (сейчас ' + local + ')', '🔔', 7000);
             } else {
@@ -5012,6 +5052,356 @@ function stopScreensaver() {
         ssEl = null;
     }
     resetScreensaver();
+    setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_screensaver_off, 'wave'); }, 1000);
+}
+
+// ==================== CLIPPY ====================
+var _clippyEnabled = localStorage.getItem('edge_clippy_enabled') !== 'false';
+var _clippyIdleTimer = null;
+var _clippyBlinkTimer = null;
+var _clippyLookTimer = null;
+var _clippyAnimTimer = null;
+var _clippyCurAnim = 'idle';
+var _clippyPrevLinksLen = links.length;
+
+var CLIPPY_MSGS = {
+    greet: [
+        'Привет! Я Скрепка. Чем могу помочь?',
+        'С возвращением! Готов помочь с новой вкладкой.',
+        {text:'Добро пожаловать!', actions:[{label:'Что умеешь?', fn:'clippyShowHelp'}]}
+    ],
+    greet_morning: ['Доброе утро! Хорошего рабочего дня!', 'Доброе утро! Готов помочь.'],
+    greet_evening: ['Добрый вечер! Работаете допоздна?', 'Вечер добрый! Чем занимаемся сегодня?'],
+    tip_general: [
+        'Совет: нажмите правой кнопкой на рабочий стол для контекстного меню.',
+        'Совет: ярлыки можно группировать в папки.',
+        'Совет: Ctrl+Alt+R открывает диалог «Выполнить».',
+        'Совет: Ctrl+Shift+Esc — Диспетчер задач.',
+        'Вы знали, что можно перетаскивать ярлыки прямо на рабочем столе?',
+        'Совет: в Мой компьютер → диск D: находятся ваши закладки браузера.',
+        'Кажется, ярлыков стало много. Попробуйте организовать их в папки!',
+        'Совет: обои рабочего стола можно поменять в Пуск → Свой фон.',
+        'Вы можете экспортировать все данные через Пуск → Экспорт данных.',
+        'Скринсейвер настраивается в Свойства экрана → Заставка.',
+    ],
+    app_notepad: [
+        'Кажется, вы пишете заметку! Черновики сохраняются автоматически.',
+        'В блокноте можно открывать сохранённые черновики через меню Файл.',
+    ],
+    app_calculator: [
+        'Подсказка: кнопки калькулятора работают с клавиатуры!',
+        'Калькулятор поддерживает стандартные арифметические операции.',
+    ],
+    app_minesweeper: [
+        'Удачи с сапёром! Первый ход никогда не взорвётся.',
+        'Совет: правый клик ставит флажок на предполагаемую мину.',
+    ],
+    app_solitaire: [
+        'Косынка! Цель — собрать все масти сверху по порядку.',
+        'Удачи с картами! Иногда партия принципиально непроходима — не переживайте.',
+    ],
+    app_hearts: [
+        'В Червах старайтесь не брать взятки с очками!',
+        'Передать все черви противнику — это называется «Застрелить луну»!',
+    ],
+    app_pinball: [
+        'Пинбол! Следите за бонусными мультипликаторами.',
+        'Держите шарик в верхней части поля — там больше очков!',
+    ],
+    app_search: [
+        'Поиск откроет новую вкладку. Можно искать в Яндексе или Google.',
+    ],
+    app_taskmgr: [
+        {text:'В диспетчере задач можно закрыть зависшее окно кнопкой «Снять».', anim:'think'},
+        'Совет: в диспетчере задач отображаются все открытые приложения.',
+    ],
+    app_settings: [
+        'В настройках можно сменить режим отображения ярлыков и настроить заставку.',
+        {text:'Меня можно отключить здесь, во вкладке «Параметры». Только не надо!', anim:'alert'},
+    ],
+    app_run: ['В диалоге «Выполнить» работает автодополнение из истории браузера.'],
+    app_mycomputer: [
+        'Мой компьютер: диск C: — ваши ярлыки, диск D: — закладки браузера.',
+    ],
+    app_paint: [
+        'В Paint используйте правую кнопку для рисования фоновым цветом.',
+        'Paint: Ctrl+Z отменяет последнее действие.',
+    ],
+    app_cmd: [
+        'Попробуйте команды: help, ver, date, echo, cls.',
+    ],
+    app_wordpad: ['WordPad поддерживает жирный (Ctrl+B), курсив (Ctrl+I) и списки.'],
+    app_recycle: ['В корзине хранятся удалённые ярлыки. Их можно восстановить!'],
+    app_sysinfo: ['Системная информация: разрешение экрана, браузер и аптайм страницы.'],
+    react_bsod: [
+        {text:'Это было близко! Синий экран — классика Windows.', anim:'alert'},
+        {text:'Не волнуйтесь, это просто пасхалка!', anim:'wave'},
+        {text:'Я тоже испугался!', anim:'excited'},
+    ],
+    react_created: [
+        {text:'Ярлык добавлен! Перетащите его в папку для организации.', anim:'wave'},
+        'Отличный выбор! Ярлык появился на рабочем столе.',
+        {text:'Готово! Двойной клик открывает ярлык.', anim:'wave'},
+    ],
+    react_update: [
+        {text:'Доступно обновление! Нажмите на колокольчик 🔔 в трее.', anim:'excited'},
+    ],
+    react_minesweeper_win: [
+        {text:'Поздравляю! Вы прошли сапёра!', anim:'excited'},
+        {text:'Браво! Ни одной мины!', anim:'wave'},
+    ],
+    react_minesweeper_loss: [
+        'Не повезло! Попробуйте снова.',
+        {text:'Бывает! Главное — не угол.', anim:'think'},
+        'Помните: правый клик ставит флажок, это помогает!',
+    ],
+    react_solitaire_win: [
+        {text:'Косынка пройдена! Вы молодец!', anim:'excited'},
+        {text:'Великолепно! Все масти на месте!', anim:'wave'},
+    ],
+    react_many_windows: [
+        {text:'У вас открыто много окон! Может, свернёте лишние?', anim:'think'},
+    ],
+    react_screensaver_off: [
+        'С возвращением! Давно вас не было.',
+        {text:'Отдохнули? Я тут ждал.', anim:'wave'},
+    ],
+    idle_random: [
+        'Кажется, ничего не происходит. Могу чем-нибудь помочь?',
+        {text:'Скучаю... Может, сыграем в сапёра?', actions:[{label:'Играть!', fn:'clippyOpenMinesweeper'}]},
+        'Вы знали, что ярлыки можно переупорядочить перетаскиванием?',
+        {text:'Я умею: открывать приложения, давать советы и поднимать настроение!', anim:'wave'},
+        'Если я мешаю — меня можно отключить в Настройках → Параметры.',
+        {text:'Попробуйте диск D: в Мой компьютер — там ваши закладки браузера!', actions:[{label:'Открыть', fn:'clippyOpenMyComputer'}]},
+        'Совет дня: экспортируйте ярлыки перед переустановкой браузера.',
+        {text:'Нужен калькулятор?', actions:[{label:'Открыть', fn:'clippyOpenCalculator'}]},
+        'Стикеры (📌 на панели быстрого запуска) отлично подходят для быстрых заметок.',
+        {text:'Хотите узнать, что я умею?', actions:[{label:'Да!', fn:'clippyShowHelp'}]},
+    ],
+};
+
+function clippyShowHelp() {
+    clippySay({
+        text: 'Я Скрепка! Открываю приложения, даю советы по играм и напоминаю о полезных функциях. Попробуйте!',
+        anim: 'wave',
+        actions: [{label:'Сапёр', fn:'clippyOpenMinesweeper'}, {label:'Блокнот', fn:'clippyOpenNotepad'}]
+    });
+}
+function clippyOpenMinesweeper() { closeStartMenu(); openApp('minesweeper'); }
+function clippyOpenMyComputer()  { closeStartMenu(); openMyComputer(); }
+function clippyOpenCalculator()  { closeStartMenu(); openApp('calculator'); }
+function clippyOpenNotepad()     { closeStartMenu(); openNotepad(); }
+
+function clippyInit() {
+    if (!_clippyEnabled) return;
+    if (document.getElementById('clippy-wrap')) return;
+    var wrap = document.createElement('div');
+    wrap.id = 'clippy-wrap';
+    wrap.innerHTML = [
+        '<div id="clippy-bubble" class="hidden">',
+        '  <button id="clippy-bubble-close" title="Закрыть">&#x2715;</button>',
+        '  <div id="clippy-bubble-text"></div>',
+        '  <div id="clippy-bubble-actions"></div>',
+        '</div>',
+        '<svg id="clippy-svg" viewBox="0 0 64 100" width="64" height="100"',
+        '     xmlns="http://www.w3.org/2000/svg" class="clippy-anim-idle">',
+        '  <defs>',
+        '    <linearGradient id="cg-silver" x1="0" y1="0" x2="1" y2="1">',
+        '      <stop offset="0%"   stop-color="#e8e8e8"/>',
+        '      <stop offset="40%"  stop-color="#c0c0c0"/>',
+        '      <stop offset="70%"  stop-color="#a0a0a0"/>',
+        '      <stop offset="100%" stop-color="#888"/>',
+        '    </linearGradient>',
+        '    <linearGradient id="cg-silver2" x1="1" y1="0" x2="0" y2="1">',
+        '      <stop offset="0%"   stop-color="#d8d8d8"/>',
+        '      <stop offset="100%" stop-color="#909090"/>',
+        '    </linearGradient>',
+        '  </defs>',
+        '  <path id="clippy-body-outer"',
+        '    d="M32 4 C48 4 56 14 56 28 C56 60 44 88 32 92',
+        '       C20 88 8 60 8 28 C8 14 16 4 32 4 Z"',
+        '    fill="none" stroke="url(#cg-silver)" stroke-width="8"',
+        '    stroke-linecap="round" stroke-linejoin="round"/>',
+        '  <path id="clippy-body-inner"',
+        '    d="M32 22 C42 22 48 30 48 40 C48 58 40 74 32 78',
+        '       C24 74 16 58 16 40 C16 30 22 22 32 22 Z"',
+        '    fill="none" stroke="url(#cg-silver2)" stroke-width="7"',
+        '    stroke-linecap="round" stroke-linejoin="round"/>',
+        '  <g id="clippy-face">',
+        '    <path id="clippy-brow-l" d="M18 30 Q23 27 28 29"',
+        '      fill="none" stroke="#555" stroke-width="2" stroke-linecap="round"/>',
+        '    <path id="clippy-brow-r" d="M36 29 Q41 27 46 30"',
+        '      fill="none" stroke="#555" stroke-width="2" stroke-linecap="round"/>',
+        '    <g id="clippy-eye-l">',
+        '      <ellipse cx="23" cy="36" rx="5" ry="6" fill="white" stroke="#bbb" stroke-width="0.8"/>',
+        '      <circle id="clippy-pupil-l" cx="23" cy="37" r="3" fill="#222"/>',
+        '      <circle cx="24.2" cy="35.5" r="1" fill="white"/>',
+        '    </g>',
+        '    <g id="clippy-eye-r">',
+        '      <ellipse cx="41" cy="36" rx="5" ry="6" fill="white" stroke="#bbb" stroke-width="0.8"/>',
+        '      <circle id="clippy-pupil-r" cx="41" cy="37" r="3" fill="#222"/>',
+        '      <circle cx="42.2" cy="35.5" r="1" fill="white"/>',
+        '    </g>',
+        '    <path id="clippy-mouth" d="M25 47 Q32 51 39 47"',
+        '      fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round"/>',
+        '  </g>',
+        '</svg>',
+    ].join('\n');
+    document.body.appendChild(wrap);
+    _clippyInitDrag(wrap);
+    _clippyRestorePos(wrap);
+    document.getElementById('clippy-bubble-close').addEventListener('click', function(e){
+        e.stopPropagation(); clippyDismiss();
+    });
+    _clippyStartBlink();
+    _clippyStartLookAround();
+    setTimeout(function(){
+        var h = new Date().getHours();
+        var msgs = h < 12 ? CLIPPY_MSGS.greet_morning
+                 : h < 18 ? CLIPPY_MSGS.greet
+                 :           CLIPPY_MSGS.greet_evening;
+        clippySay(msgs, 'wave');
+    }, 2000);
+    _clippyScheduleIdle();
+}
+
+function clippySay(msgOrArray, anim, duration) {
+    if (!_clippyEnabled) return;
+    var bubble = document.getElementById('clippy-bubble');
+    if (!bubble) return;
+    duration = duration || 7000;
+    var msg = Array.isArray(msgOrArray)
+        ? msgOrArray[Math.floor(Math.random() * msgOrArray.length)]
+        : msgOrArray;
+    if (typeof msg === 'string') msg = {text: msg};
+    var useAnim = msg.anim || anim || 'talk';
+    clippySetAnim(useAnim);
+    _clippyMouthExpr('talk');
+    var textEl = document.getElementById('clippy-bubble-text');
+    var actEl  = document.getElementById('clippy-bubble-actions');
+    if (!textEl || !actEl) return;
+    textEl.textContent = msg.text;
+    actEl.innerHTML = '';
+    (msg.actions || []).forEach(function(a){
+        var btn = document.createElement('button');
+        btn.className = 'clippy-action-btn';
+        btn.textContent = a.label;
+        btn.addEventListener('click', function(){
+            if (window[a.fn]) window[a.fn]();
+            clippyDismiss();
+        });
+        actEl.appendChild(btn);
+    });
+    bubble.classList.remove('hidden');
+    clearTimeout(_clippyAnimTimer);
+    _clippyAnimTimer = setTimeout(clippyDismiss, duration);
+}
+
+function clippyDismiss() {
+    var bubble = document.getElementById('clippy-bubble');
+    if (bubble) bubble.classList.add('hidden');
+    clippySetAnim('idle');
+    _clippyMouthExpr('neutral');
+    _clippyScheduleIdle();
+}
+
+function clippySetAnim(state) {
+    var svg = document.getElementById('clippy-svg');
+    if (!svg) return;
+    Array.from(svg.classList).forEach(function(cls) {
+        if (/^clippy-anim-/.test(cls)) svg.classList.remove(cls);
+    });
+    _clippyCurAnim = state;
+    svg.classList.add('clippy-anim-' + state);
+    if (state !== 'idle') {
+        clearTimeout(_clippyAnimTimer);
+        _clippyAnimTimer = setTimeout(function(){
+            if (_clippyCurAnim === state) clippySetAnim('idle');
+        }, 3000);
+    }
+}
+
+function _clippyMouthExpr(type) {
+    var m = document.getElementById('clippy-mouth');
+    if (!m) return;
+    var paths = {
+        neutral: 'M25 47 Q32 51 39 47',
+        talk:    'M25 46 Q32 50 39 46',
+        smile:   'M24 46 Q32 53 40 46',
+        sad:     'M25 50 Q32 46 39 50',
+    };
+    if (paths[type]) m.setAttribute('d', paths[type]);
+}
+
+function _clippyStartBlink() {
+    function doBlink() {
+        var svg = document.getElementById('clippy-svg');
+        if (!svg) return;
+        svg.classList.add('clippy-blinking');
+        setTimeout(function(){ if (svg) svg.classList.remove('clippy-blinking'); }, 200);
+        _clippyBlinkTimer = setTimeout(doBlink, 2500 + Math.random() * 3000);
+    }
+    _clippyBlinkTimer = setTimeout(doBlink, 3000);
+}
+
+function _clippyStartLookAround() {
+    var dirs = ['clippy-look-left', 'clippy-look-right', 'clippy-look-up', ''];
+    function doLook() {
+        var svg = document.getElementById('clippy-svg');
+        if (!svg) return;
+        svg.classList.remove('clippy-look-left', 'clippy-look-right', 'clippy-look-up');
+        var d = dirs[Math.floor(Math.random() * dirs.length)];
+        if (d) svg.classList.add(d);
+        _clippyLookTimer = setTimeout(function(){
+            if (svg) svg.classList.remove('clippy-look-left', 'clippy-look-right', 'clippy-look-up');
+            _clippyLookTimer = setTimeout(doLook, 4000 + Math.random() * 5000);
+        }, 1200);
+    }
+    _clippyLookTimer = setTimeout(doLook, 5000);
+}
+
+function _clippyScheduleIdle() {
+    clearTimeout(_clippyIdleTimer);
+    _clippyIdleTimer = setTimeout(function(){
+        var bubble = document.getElementById('clippy-bubble');
+        if (!bubble || bubble.classList.contains('hidden')) {
+            clippySay(CLIPPY_MSGS.idle_random, 'think');
+        }
+    }, 4 * 60 * 1000 + Math.random() * 2 * 60 * 1000);
+}
+
+function _clippyInitDrag(wrap) {
+    wrap.addEventListener('mousedown', function(e){
+        if (e.target.closest('#clippy-bubble')) return;
+        e.preventDefault();
+        var sx = e.clientX, sy = e.clientY;
+        // Compute current offset in left/top terms
+        var rect = wrap.getBoundingClientRect();
+        var ox = rect.left, oy = rect.top;
+        wrap.style.right = ''; wrap.style.bottom = '';
+        wrap.style.left = ox + 'px'; wrap.style.top = oy + 'px';
+        function onM(e) {
+            wrap.style.left = Math.max(0, Math.min(window.innerWidth  - 80,  ox + e.clientX - sx)) + 'px';
+            wrap.style.top  = Math.max(0, Math.min(window.innerHeight - 120, oy + e.clientY - sy)) + 'px';
+        }
+        function onU() {
+            document.removeEventListener('mousemove', onM);
+            document.removeEventListener('mouseup',  onU);
+            try { localStorage.setItem('edge_clippy_pos', JSON.stringify({x: wrap.offsetLeft, y: wrap.offsetTop})); } catch(ex){}
+        }
+        document.addEventListener('mousemove', onM);
+        document.addEventListener('mouseup',   onU);
+    });
+}
+
+function _clippyRestorePos(wrap) {
+    try {
+        var pos = JSON.parse(localStorage.getItem('edge_clippy_pos') || 'null');
+        if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            wrap.style.right = ''; wrap.style.bottom = '';
+            wrap.style.left = pos.x + 'px'; wrap.style.top = pos.y + 'px';
+        }
+    } catch(e) {}
 }
 
 // ==================== GLOBAL CLICK / KEY LISTENERS ====================
@@ -5133,6 +5523,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const smUser = document.querySelector('.sm-username');
     if (smUser) smUser.textContent = username;
     initScreenshots(function() { renderDesktop(); renderStickies(); });
+    clippyInit();
     updateClock();
     setInterval(updateClock, 1000);
 
