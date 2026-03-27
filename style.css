@@ -1585,8 +1585,24 @@ body {
 .clippy-blinking #clippy-eye-l,
 .clippy-blinking #clippy-eye-r { animation: clippy-blink-eyes 0.18s ease-in-out 1; }
 
-/* Взгляд */
+/* обновление координат взгляда под новый размер */
 #clippy-face { transition: transform 0.25s ease; }
-.clippy-look-left  #clippy-face { transform: translateX(-3px); }
-.clippy-look-right #clippy-face { transform: translateX(3px); }
-.clippy-look-up    #clippy-face { transform: translateY(-3px); }
+.clippy-look-left  #clippy-face { transform: translateX(-8px); }
+.clippy-look-right #clippy-face { transform: translateX(8px); }
+.clippy-look-up    #clippy-face { transform: translateY(-8px); }
+
+/* анимации руки с пером */
+@keyframes clippy-arm-wave {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-20deg); }
+    75% { transform: rotate(15deg); }
+}
+
+@keyframes clippy-arm-think {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-35deg); }
+}
+
+.clippy-anim-talk #clippy-arm-l { animation: clippy-arm-wave 0.6s infinite ease-in-out; }
+.clippy-anim-wave #clippy-arm-l { animation: clippy-arm-wave 0.3s infinite ease-in-out; }
+.clippy-anim-think #clippy-arm-l { animation: clippy-arm-think 1.6s infinite ease-in-out; }
