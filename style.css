@@ -1474,7 +1474,7 @@ body {
 
 #clippy-bubble {
     position: absolute;
-    bottom: 108%; right: 0;
+    bottom: 108%; left: -130px;
     width: 220px;
     background: #ffffc8;
     border: 1px solid #b8a000;
@@ -1606,3 +1606,38 @@ body {
 .clippy-anim-talk #clippy-arm-l { animation: clippy-arm-wave 0.6s infinite ease-in-out; }
 .clippy-anim-wave #clippy-arm-l { animation: clippy-arm-wave 0.3s infinite ease-in-out; }
 .clippy-anim-think #clippy-arm-l { animation: clippy-arm-think 1.6s infinite ease-in-out; }
+
+/* A1. Брови */
+@keyframes clippy-brow-up   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes clippy-brow-down { 0%,100%{transform:translateY(0)} 50%{transform:translateY(4px) rotate(5deg)} }
+.clippy-anim-excited #clippy-brow-l,
+.clippy-anim-excited #clippy-brow-r,
+.clippy-anim-alert   #clippy-brow-l,
+.clippy-anim-alert   #clippy-brow-r { animation: clippy-brow-up 0.5s ease-in-out infinite; }
+.clippy-anim-sad #clippy-brow-l { animation: clippy-brow-down 1.4s ease-in-out 2; transform-origin: 100px 95px; }
+.clippy-anim-sad #clippy-brow-r { animation: clippy-brow-down 1.4s ease-in-out 2; transform-origin: 175px 95px; }
+
+
+/* A3. Зевота */
+@keyframes clippy-yawn {
+    0%,100% { transform: translateY(0) rotate(0deg); }
+    30%     { transform: translateY(-6px) rotate(-4deg); }
+    70%     { transform: translateY(-8px) rotate(4deg); }
+}
+.clippy-anim-yawn { animation: clippy-yawn 2s ease-in-out 1; }
+
+/* A4. Выглядывание из-за края */
+@keyframes clippy-peek {
+    0%   { transform: translateX(60px); }
+    20%  { transform: translateX(0px); }
+    80%  { transform: translateX(0px); }
+    100% { transform: translateX(60px); }
+}
+.clippy-peeking { animation: clippy-peek 3s ease-in-out 1 !important; }
+
+/* A5. Сон */
+@keyframes clippy-sleep {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(3px); }
+}
+.clippy-anim-sleep { animation: clippy-sleep 2s ease-in-out infinite; }

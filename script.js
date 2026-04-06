@@ -617,6 +617,9 @@ document.addEventListener('mouseup', function(e) {
             intoFolder = true;
             selectedIndices.clear();
             saveAndRender();
+            if (typeof clippySay === 'function' && Math.random() < 0.4) {
+                setTimeout(function(){ clippySay(CLIPPY_MSGS.react_drop_folder, 'wave', 3000); }, 300);
+            }
         }
 
         // Check folder icons
@@ -694,6 +697,9 @@ document.addEventListener('mouseup', function(e) {
                 if (wEntry && wEntry.el && wEntry.el._renderFolderContent) wEntry.el._renderFolderContent();
                 intoFolder = true;
                 saveAndRender();
+                if (typeof clippySay === 'function' && Math.random() < 0.4) {
+                    setTimeout(function(){ clippySay(CLIPPY_MSGS.react_drop_folder, 'wave', 3000); }, 300);
+                }
             }
         });
         if (!intoFolder) {
@@ -713,6 +719,9 @@ document.addEventListener('mouseup', function(e) {
                         if (wEntry && wEntry.el && wEntry.el._renderFolderContent) wEntry.el._renderFolderContent();
                         intoFolder = true;
                         saveAndRender();
+                        if (typeof clippySay === 'function' && Math.random() < 0.4) {
+                            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_drop_folder, 'wave', 3000); }, 300);
+                        }
                     }
                 }
             });
@@ -1423,6 +1432,10 @@ function confirmEmptyTrash() {
     ok.addEventListener('click', function() {
         trashedLinks = []; localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks));
         wmClose(winId); renderDesktop();
+        // D6: Реакция на опустошение корзины
+        if (typeof clippySay === 'function') {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_bin_empty, 'sad', 5000); }, 300);
+        }
     });
     cn.addEventListener('click', function() { wmClose(winId); });
 }
@@ -1663,7 +1676,13 @@ let activeWindowId = null;
 
 function wmCreate(id, title, contentEl, width, height, icon) {
     width = width||400; height = height||300; icon = icon||'\u{1F5A5}';
-    if (wmWindows[id]) { wmRestore(id); wmFocus(id); return wmWindows[id].el; }
+    if (wmWindows[id]) {
+        // D5: Реакция на повторное открытие того же приложения
+        if (typeof clippySay === 'function') {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_dup_app, 'think', 4000); }, 300);
+        }
+        wmRestore(id); wmFocus(id); return wmWindows[id].el;
+    }
 
     const win = document.createElement('div');
     win.className = 'xp-window'; win.id = 'win-' + id;
@@ -1757,6 +1776,10 @@ function wmClose(id) {
         if (!wmWindows[id]) return;
         w.el.remove();
         delete wmWindows[id];
+        // D4: Реакция на закрытие всех окон
+        if (typeof clippySay === 'function' && Object.keys(wmWindows).length === 0) {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_win_closed, 'wave', 4000); }, 400);
+        }
     }, 125);
 }
 function wmAddToTaskbar(id, title, icon) {
@@ -2257,7 +2280,11 @@ function showTileDialog(isFolder, item) {
     function doSave(resolvedName) {
         if(isFolder){
             if(isEdit){links[editCtx.tileIndex].name=resolvedName; const fw=wmWindows['folder-'+editCtx.tileIndex]; if(fw)fw.el.querySelector('.xp-titlebar-title').textContent=resolvedName;}
-            else links.push({isFolder:true,name:resolvedName,items:[],x:undefined,y:undefined});
+            else {
+                links.push({isFolder:true,name:resolvedName,items:[],x:undefined,y:undefined});
+                // F7: Реакция на создание новой папки
+                if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_new_folder,'think',4000);},300);
+            }
         } else {
             let url=ui?ui.value.trim():''; if(!url)return;
             if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
@@ -2432,6 +2459,10 @@ function openSearch() {
 function toggleCalendar() {
     const existing = document.getElementById('xp-calendar');
     if (existing) { existing.remove(); return; }
+    // D8: Реакция на открытие календаря
+    if (typeof clippySay === 'function') {
+        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_calendar, 'talk', 4000); }, 300);
+    }
     let calYear, calMonth;
     const now = new Date();
     calYear = now.getFullYear(); calMonth = now.getMonth();
@@ -2863,6 +2894,12 @@ function openBrowserBookmarks() {
 
     wmCreate('bkmarks', 'Избранное (D:)', wrap, 580, 420, '📚');
 
+    // F6: Реакция на первое открытие диска D
+    if (typeof clippySay === 'function' && !localStorage.getItem('edge_ddrive_seen')) {
+        localStorage.setItem('edge_ddrive_seen', '1');
+        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_drive_d, 'excited', 6000); }, 1000);
+    }
+
     chrome.bookmarks.getTree(function(tree){
         var roots = (tree[0] && tree[0].children) ? tree[0].children : [];
         _renderBkmarksTree(treeEl, roots, rowsEl, statusEl);
@@ -3131,7 +3168,13 @@ function openSettings() {
         }
     }
     buildModeControls();
-    vs.addEventListener('change', function() { settings.viewMode=vs.value; localStorage.setItem(STORAGE.viewMode,vs.value); buildModeControls(); renderDesktop(); });
+    vs.addEventListener('change', function() {
+        settings.viewMode=vs.value; localStorage.setItem(STORAGE.viewMode,vs.value); buildModeControls(); renderDesktop();
+        // D7: Реакция на смену вида
+        if (typeof clippySay === 'function') {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_settings_change, 'wave', 4000); }, 500);
+        }
+    });
 
     // --- Tab: Рабочий стол ---
     const dP = tabPanels['desktop'];
@@ -3252,7 +3295,16 @@ function openNotepad() {
     const sb=document.createElement('div'); sb.className='notepad-statusbar'; sb.textContent='Строка: 1 | Столбец: 1';
     c.appendChild(mb); c.appendChild(ta); c.appendChild(sb);
     wmCreate('notepad','Блокнот',c,560,400,'\uD83D\uDCDD');
-    ta.addEventListener('keyup',function(){const b=ta.value.substr(0,ta.selectionStart).split('\n');sb.textContent='Строка: '+b.length+' | Столбец: '+(b[b.length-1].length+1);});
+    var _notepadLongShown = false;
+    ta.addEventListener('keyup',function(){
+        const b=ta.value.substr(0,ta.selectionStart).split('\n');
+        sb.textContent='Строка: '+b.length+' | Столбец: '+(b[b.length-1].length+1);
+        // F1: Реакция на 500+ символов
+        if (!_notepadLongShown && ta.value.length >= 500 && typeof clippySay === 'function') {
+            _notepadLongShown = true;
+            clippySay(CLIPPY_MSGS.react_notepad_long, 'talk', 6000);
+        }
+    });
     fb.addEventListener('click',function(e){e.stopPropagation();fm.classList.toggle('hidden');});
     fm.addEventListener('click',function(e){const a=e.target.closest('.notepad-menu-action');if(!a)return;fm.classList.add('hidden');const act=parseInt(a.dataset.action);if(act===0)ta.value='';else if(act===1)localStorage.setItem(STORAGE.notepad,ta.value);else ta.value=localStorage.getItem(STORAGE.notepad)||'';});
     document.addEventListener('click',function handler(e){if(!wmWindows['notepad']){document.removeEventListener('click',handler);return;}if(!fm.contains(e.target)&&e.target!==fb)fm.classList.add('hidden');});
@@ -3280,7 +3332,16 @@ function openCalculator() {
             const btn=e.target.closest('.calc-btn');if(!btn)return;
             if(btn.dataset.d!==undefined){if(cs.waitOp){cs.disp=btn.dataset.d;cs.waitOp=false;}else cs.disp=cs.disp==='0'?btn.dataset.d:cs.disp+btn.dataset.d;if(cs.disp.length>14)cs.disp=cs.disp.slice(0,14);}
             else if(btn.dataset.op){const v=parseFloat(cs.disp);if(cs.op&&!cs.waitOp){const r=calc(cs.prev,v,cs.op);cs.disp=fmt(r);cs.prev=r;}else cs.prev=v;cs.op=btn.dataset.op;cs.waitOp=true;}
-            else if(btn.dataset.fn){const v=parseFloat(cs.disp);switch(btn.dataset.fn){case 'dot':if(!cs.disp.includes('.'))cs.disp+='.';break;case 'eq':if(cs.op&&!cs.waitOp){cs.disp=fmt(calc(cs.prev,v,cs.op));cs.op=null;cs.prev=null;cs.waitOp=false;}break;case 'c':cs={disp:'0',prev:null,op:null,waitOp:false,mem:cs.mem};break;case 'ce':cs.disp='0';break;case 'back':cs.disp=cs.disp.length>1?cs.disp.slice(0,-1):'0';break;case 'ms':cs.mem=v;break;case 'mr':cs.disp=fmt(cs.mem);break;case 'mc':cs.mem=0;break;case 'm+':cs.mem+=v;break;}}
+            else if(btn.dataset.fn){const v=parseFloat(cs.disp);switch(btn.dataset.fn){case 'dot':if(!cs.disp.includes('.'))cs.disp+='.';break;case 'eq':if(cs.op&&!cs.waitOp){
+    var _isDivZero=(cs.op==='/'&&v===0);
+    var _calcRes=calc(cs.prev,v,cs.op);
+    cs.disp=fmt(_calcRes);cs.op=null;cs.prev=null;cs.waitOp=false;
+    if(typeof clippySay==='function'){
+        if(_isDivZero){setTimeout(function(){clippySay(CLIPPY_MSGS.react_calc_divzero,'alert',5000);},100);}
+        else if(_calcRes>=1000000){setTimeout(function(){clippySay(CLIPPY_MSGS.react_calc_million,'excited',5000);},100);}
+        else if(_calcRes===42){setTimeout(function(){clippySay(CLIPPY_MSGS.react_calc_42,'wave',6000);},100);}
+    }
+}break;case 'c':cs={disp:'0',prev:null,op:null,waitOp:false,mem:cs.mem};break;case 'ce':cs.disp='0';break;case 'back':cs.disp=cs.disp.length>1?cs.disp.slice(0,-1):'0';break;case 'ms':cs.mem=v;break;case 'mr':cs.disp=fmt(cs.mem);break;case 'mc':cs.mem=0;break;case 'm+':cs.mem+=v;break;}}
             upd();
         });
     },0);
@@ -3404,13 +3465,22 @@ function openMinesweeper() {
             const el = e.target.closest('.mines-cell'); if(!el||over||won) return;
             const r=parseInt(el.dataset.r), cc=parseInt(el.dataset.c);
             if (flag[r][cc] || rev[r][cc]) return;
-            if (first) { first=false; place(r,cc,R,C,M); tint=setInterval(function(){secs++;setTimer(secs);},1000); }
+            if (first) {
+                first=false; place(r,cc,R,C,M); tint=setInterval(function(){secs++;setTimer(secs);},1000);
+                // E1: Первый клик
+                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_mines_firstclick, 'think', 4000); }, 300);
+            }
             if (board[r][cc]===-1) {
                 over=true; rev[r][cc]=true; clearInterval(tint);
                 for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
                 rend(R,C); const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
                 minesweeperLosses++;
-                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_loss, 'sad'); }, 500);
+                // E3: 2 подряд поражения (до BSOD)
+                if (minesweeperLosses === 2) {
+                    setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_mines_second_loss, 'sad'); }, 500);
+                } else {
+                    setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_loss, 'sad'); }, 500);
+                }
                 if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
                 return;
             }
@@ -3427,6 +3497,10 @@ function openMinesweeper() {
             flag[r][cc] = !flag[r][cc];
             setCounter(M - countFlags());
             rend(R, C);
+            // E2: Реакция на установку флага (30% шанс)
+            if (flag[r][cc] && Math.random() < 0.3) {
+                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_mines_flag, 'wave', 3500); }, 200);
+            }
         });
 
         // Middle-click: chord (reveal neighbors if flag count matches number)
@@ -3583,9 +3657,23 @@ function openPinball() {
             return{dist:d,nx:ex/d,ny:ey/d,t:t};
         }
         function capSpeed(){const cap=15*SPDFAC;const s=Math.hypot(ball.vx,ball.vy);if(s>cap){ball.vx*=cap/s;ball.vy*=cap/s;}}
-        function addPts(p){score+=p*mult;updateHUD();}
+        function addPts(p){
+            var oldScore = score;
+            score += p * mult;
+            updateHUD();
+            // E6: Реакция на достижение 100k очков
+            if (oldScore < 100000 && score >= 100000 && typeof clippySay === 'function') {
+                setTimeout(function(){ clippySay(CLIPPY_MSGS.react_pinball_score, 'excited', 4000); }, 200);
+            }
+        }
         function resetBall(){ball.x=LCX;ball.y=380-BR;ball.vx=0;ball.vy=0;launched=false;inLane=false;springCharge=0;charging=false;}
-        function launch(){ball.vx=0;ball.vy=-(4+springCharge*10)*SPDFAC;launched=true;inLane=true;}
+        function launch(){
+            // E4: Реакция на запуск (только первый шар)
+            if (!launched && typeof clippySay === 'function') {
+                setTimeout(function(){ clippySay(CLIPPY_MSGS.react_pinball_launch, 'excited', 5000); }, 300);
+            }
+            ball.vx=0;ball.vy=-(4+springCharge*10)*SPDFAC;launched=true;inLane=true;
+        }
         function flipTip(f){return{x:f.x+Math.cos(f.curAng)*f.len,y:f.y+Math.sin(f.curAng)*f.len};}
 
         // ── Physics ──
@@ -3756,6 +3844,10 @@ function openPinball() {
                     if (m) m.textContent = 'ИГРА ОКОНЧЕНА — Пробел для рестарта';
                 } else {
                     resetBall();
+                    // E5: Реакция на потерю шара
+                    if (typeof clippySay === 'function') {
+                        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_pinball_loss, 'sad', 3500); }, 400);
+                    }
                 }
             }
         }
@@ -4093,6 +4185,7 @@ function initSolitaire() {
     const SOL_RED   = new Set(['♥','♦']);
 
     let deck, tableau, foundations, stock, waste, score, dragSrc;
+    let solFirstMove = true, solMoveCount = 0, solFoundMoves = 0;
 
     function newDeck() {
         const d = [];
@@ -4415,6 +4508,7 @@ function initSolitaire() {
                 tableau[idx].pop(); f.push(card); score += 10;
                 if (tableau[idx].length && !tableau[idx][tableau[idx].length-1].face) { tableau[idx][tableau[idx].length-1].face=true; score+=5; }
             }
+            solFoundMoves++;
         } else if (dest === 'tableau') {
             const col = tableau[destIdx];
             const topCard = col.length ? col[col.length-1] : null;
@@ -4430,6 +4524,17 @@ function initSolitaire() {
                 score += 3;
                 if (tableau[idx].length && !tableau[idx][tableau[idx].length-1].face) { tableau[idx][tableau[idx].length-1].face=true; score+=5; }
             }
+        }
+        // E7: Первый ход в Solitaire
+        if (solFirstMove && typeof clippySay === 'function') {
+            solFirstMove = false;
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_sol_firstmove, 'talk', 5000); }, 300);
+        }
+        // E8: Возможный пат — 10+ ходов без хода в стопку
+        solMoveCount++;
+        if ((solMoveCount - solFoundMoves) > 10 && typeof clippySay === 'function') {
+            solMoveCount = 0;
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_sol_stuck, 'think', 5000); }, 300);
         }
         render();
         return true;
@@ -4561,10 +4666,26 @@ function initHearts() {
             if (shootIdx >= 0) {
                 scores = scores.map(function(s,i){return i===shootIdx?0:s+26;});
                 setStatus(names[shootIdx]+' взял все штрафы! +26 всем остальным.');
+                // E9: Реакция на shooting the moon
+                if (typeof clippySay === 'function') {
+                    var moonAnim = shootIdx === 0 ? 'excited' : 'wave';
+                    setTimeout(function(){ clippySay(CLIPPY_MSGS.react_hearts_moon, moonAnim); }, 600);
+                }
             }
             renderHearts();
             setTimeout(function(){
                 const msg = names.map(function(n,i){return n+': '+scores[i];}).join('\n');
+                // E9: Реакция на победу/поражение в Hearts
+                if (typeof clippySay === 'function') {
+                    var playerScore = scores[0];
+                    var maxScore = Math.max.apply(null, scores);
+                    var minScore = Math.min.apply(null, scores);
+                    if (playerScore === minScore) {
+                        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_hearts_win, 'excited'); }, 100);
+                    } else if (playerScore === maxScore) {
+                        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_hearts_loss, 'sad'); }, 100);
+                    }
+                }
                 if (confirm('Раунд окончен!\n'+msg+'\nСыграть ещё?')) newGame();
             }, 500);
             return;
@@ -4649,6 +4770,7 @@ function openPaint() {
         ctx.fillRect(0,0,canvas.width,canvas.height);
 
         let tool='pencil', color='#000000', size=3, drawing=false, startX, startY, snapshot;
+        let _paintDrawStart=null, _paintLongShown=false;
 
         const COLORS=['#000000','#7f7f7f','#880000','#ff0000','#ff7f00','#ffff00','#00a500','#00ff00','#003080','#0000ff','#4b0082','#8f00ff','#ff69b4','#ffffff','#c0c0c0','#d2691e'];
         const colorWrap = document.getElementById('paint-colors');
@@ -4677,8 +4799,16 @@ function openPaint() {
         const sizeInp=document.getElementById('paint-size');
         if(sizeInp)sizeInp.addEventListener('input',function(){size=parseInt(sizeInp.value);});
 
-        document.getElementById('paint-clear').addEventListener('click',function(){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);});
-        document.getElementById('paint-save').addEventListener('click',function(){const a=document.createElement('a');a.href=canvas.toDataURL();a.download='paint.png';a.click();});
+        document.getElementById('paint-clear').addEventListener('click',function(){
+            ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+            // F3: Реакция на очистку холста
+            if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_paint_clear,'wave',4000);},100);
+        });
+        document.getElementById('paint-save').addEventListener('click',function(){
+            const a=document.createElement('a');a.href=canvas.toDataURL();a.download='paint.png';a.click();
+            // F3: Реакция на сохранение
+            if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_paint_save,'excited',4000);},100);
+        });
 
         function getPos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
 
@@ -4699,6 +4829,7 @@ function openPaint() {
 
         canvas.addEventListener('mousedown',function(e){
             const p=getPos(e); drawing=true; startX=p.x; startY=p.y;
+            if(!_paintLongShown) _paintDrawStart=Date.now();
             if(tool==='fill'){floodFill(p.x,p.y,color);return;}
             if(tool==='text'){const t=prompt('Текст:');if(t){ctx.font=(size*5)+'px Arial';ctx.fillStyle=color;ctx.fillText(t,p.x,p.y);}return;}
             snapshot=ctx.getImageData(0,0,canvas.width,canvas.height);
@@ -4706,6 +4837,11 @@ function openPaint() {
         });
         canvas.addEventListener('mousemove',function(e){
             if(!drawing)return;
+            // F3: Реакция на 30+ секунд непрерывного рисования
+            if(_paintDrawStart && !_paintLongShown && Date.now()-_paintDrawStart>30000 && typeof clippySay==='function'){
+                _paintLongShown=true;
+                clippySay(CLIPPY_MSGS.react_paint_long,'think',5000);
+            }
             const p=getPos(e);
             if(tool==='pencil'){ctx.strokeStyle=color;ctx.lineWidth=size;ctx.lineCap='round';ctx.lineTo(p.x,p.y);ctx.stroke();}
             else if(tool==='eraser'){ctx.strokeStyle='#fff';ctx.lineWidth=size*3;ctx.lineCap='round';ctx.lineTo(p.x,p.y);ctx.stroke();}
@@ -4717,8 +4853,8 @@ function openPaint() {
                 else if(tool==='line'){ctx.beginPath();ctx.moveTo(startX,startY);ctx.lineTo(p.x,p.y);ctx.stroke();}
             }
         });
-        canvas.addEventListener('mouseup',function(){drawing=false;snapshot=null;});
-        canvas.addEventListener('mouseleave',function(){drawing=false;});
+        canvas.addEventListener('mouseup',function(){drawing=false;snapshot=null;_paintDrawStart=null;});
+        canvas.addEventListener('mouseleave',function(){drawing=false;_paintDrawStart=null;});
     }, 0);
 }
 
@@ -4776,7 +4912,11 @@ function openCmd() {
         print('');
 
         const COMMANDS = {
-            help: function(){['cls - очистить экран','dir - список файлов','echo [текст] - вывести текст','cd [путь] - сменить каталог','set - переменные среды','ver - версия Windows','color - цвет текста','time - текущее время','date - текущая дата','title [заголовок] - заголовок окна','ping [хост] - пинг','ipconfig - сетевые настройки','tasklist - список задач','taskkill - завершить задачу','chkdsk - проверка диска','format - форматировать диск','shutdown - завершение работы','exit - закрыть окно'].forEach(function(l){print(l);});},
+            help: function(){
+                ['cls - очистить экран','dir - список файлов','echo [текст] - вывести текст','cd [путь] - сменить каталог','set - переменные среды','ver - версия Windows','color - цвет текста','time - текущее время','date - текущая дата','title [заголовок] - заголовок окна','ping [хост] - пинг','ipconfig - сетевые настройки','tasklist - список задач','taskkill - завершить задачу','chkdsk - проверка диска','format - форматировать диск','shutdown - завершение работы','exit - закрыть окно'].forEach(function(l){print(l);});
+                // F4: Реакция Clippy на help
+                if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_cmd_help,'wave',4000);},300);
+            },
             ver: function(){print('Microsoft Windows XP [Версия 5.1.2600]');},
             cls: function(){out.innerHTML='';},
             dir: function(){['  Volume in drive C is SYSTEM','  Volume Serial Number is DEAD-BEEF','','Directory of '+cwd,'','[.]   [..]   Program Files   Windows   Users','','               5 File(s)    0 bytes','               2 Dir(s)  80,523,321,344 bytes free'].forEach(function(l){print(l);});},
@@ -4790,14 +4930,22 @@ function openCmd() {
             ping: function(args){const h=args||'ya.ru';print('Обмен пакетами с '+h+' [77.88.55.66]:');[1,2,3,4].forEach(function(i){setTimeout(function(){print('Ответ от 77.88.55.66: число байт=32 время='+(20+Math.round(Math.random()*30))+'мс TTL=55');},i*400);});},
             ipconfig: function(){['Windows IP Configuration','','Ethernet adapter Local Area Connection:','   Connection-specific DNS Suffix: local','   IP Address. . . . . . . . . : 192.168.1.'+Math.floor(Math.random()*200+2),'   Subnet Mask . . . . . . . . : 255.255.255.0','   Default Gateway . . . . . . : 192.168.1.1'].forEach(function(l){print(l);});},
             tasklist: function(){['Image Name      PID Session Name  Mem Usage','============  ===== ============ ==========','System Idle P.    0 Console       28 K','System            4 Console      216 K','explorer.exe    888 Console   18,452 K','iexplore.exe   1024 Console   32,768 K','notepad.exe    1337 Console    4,096 K'].forEach(function(l){print(l);});},
-            taskkill: function(){print('УСПЕХ: процесс завершён.');},
+            taskkill: function(){
+                print('УСПЕХ: процесс завершён.');
+                // F5: Реакция Clippy на taskkill
+                if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_taskkill,'wave',4000);},400);
+            },
             chkdsk: function(){['Тип файловой системы: NTFS','Серийный номер тома: 3A2F-87D1','CHKDSK проверяет файлы (этап 1 из 3)...','  100 percent of file verification complete.','CHKDSK проверяет индексы (этап 2 из 3)...','  100 percent completed.','CHKDSK проверяет дескрипторы безопасности (этап 3 из 3)...','Windows проверила файловую систему и не обнаружила проблем.','  20,971,520 КБ всего места на диске.','  11,534,336 КБ занято.','   9,437,184 КБ свободно.'].forEach(function(l){print(l);});},
             format: function(){print('Предупреждение: все данные будут потеряны!');print('Нажмите Y для продолжения или N для отмены...');setTimeout(function(){print('Форматирование... Ладно, пожалею ваши данные. :)');},1000);},
             shutdown: function(){openShutdownDialog();},
             exit: function(){wmClose('cmd');},
             tree: function(){['C:\\','├── Windows','│   ├── System32','│   └── SysWOW64','├── Program Files','│   ├── Internet Explorer','│   └── Windows Media Player','└── Users','    └── User','        ├── Desktop','        ├── Documents','        └── Downloads'].forEach(function(l){print(l);});},
             systeminfo: function(){['Имя узла:   USER-PC','ОС:         Microsoft Windows XP Professional','Версия ОС:  5.1.2600 Service Pack 3 Build 2600','ОС (доп.):  Standalone Workstation','ОЗУ:        1024 МБ','Пр. память: '+Math.floor(Math.random()*400+200)+' МБ'].forEach(function(l){print(l);}); },
-            crash: function(){print('Инициирован критический сбой системы...'); setTimeout(triggerBSOD, 800);}
+            crash: function(){
+                print('Инициирован критический сбой системы...');
+                if(typeof clippySay==='function') setTimeout(function(){clippySay(CLIPPY_MSGS.react_cmd_crash,'alert',3000);},100);
+                setTimeout(triggerBSOD, 800);
+            }
         };
 
         function prompt2(){return cwd+'>';}
@@ -4813,7 +4961,12 @@ function openCmd() {
                 const arg=parts.slice(1).join(' ');
                 if(cmd===''){return;}
                 if(COMMANDS[cmd]){COMMANDS[cmd](arg);}
-                else if(cmd){print("'"+cmd+"' не является внутренней или внешней командой","cmd-error");print("исполняемой программой или пакетным файлом.","cmd-error");}
+                else if(cmd){
+                    print("'"+cmd+"' не является внутренней или внешней командой","cmd-error");
+                    print("исполняемой программой или пакетным файлом.","cmd-error");
+                    // F4: Реакция Clippy на неизвестную команду (25%)
+                    if(typeof clippySay==='function' && Math.random()<0.25) setTimeout(function(){clippySay(CLIPPY_MSGS.react_cmd_unknown,'think',4000);},400);
+                }
             }else if(e.key==='ArrowUp'){histIdx=Math.min(histIdx+1,history.length-1);inp.value=history[histIdx]||'';}
             else if(e.key==='ArrowDown'){histIdx=Math.max(histIdx-1,-1);inp.value=history[histIdx]||'';}
         });
@@ -5061,6 +5214,8 @@ var _clippyIdleTimer = null;
 var _clippyBlinkTimer = null;
 var _clippyLookTimer = null;
 var _clippyAnimTimer = null;
+var _clippyTalkInterval = null;
+var _clippySleepTimer = null;
 var _clippyCurAnim = 'idle';
 var _clippyPrevLinksLen = links.length;
 
@@ -5178,6 +5333,51 @@ var CLIPPY_MSGS = {
         'Стикеры (📌 на панели быстрого запуска) отлично подходят для быстрых заметок.',
         {text:'Хотите узнать, что я умею?', actions:[{label:'Да!', fn:'clippyShowHelp'}]},
     ],
+    // Hearts
+    react_hearts_win:  ['Победа в Червах! Сложная игра — поздравляю.'],
+    react_hearts_moon: ['ТЫ ВЗЯЛ ВСЕ ШТРАФЫ!! Стрельба по луне — высший пилотаж!'],
+    react_hearts_loss: ['Ты набрал больше всех очков... Но ничего, попробуй ещё!'],
+    // Pinball
+    react_pinball_launch: ['Space Cadet! Классика. Целься в верхние бонусные цели!'],
+    react_pinball_loss:   ['Шар потерян! Не расстраивайся, ещё есть попытки.'],
+    react_pinball_score:  ['Отличный результат! Ты покоряешь космос.'],
+    // Ситуативные
+    react_night:           ['Ещё не спишь? Ночью мозг работает иначе... или это я так думаю.'],
+    react_win_closed:      ['Теперь порядок! Пустой стол — свежий старт.'],
+    react_dup_app:         ['Ты уже открывал это только что. Случайно закрыл?'],
+    react_bin_empty:       ['Чисто! Хотя иногда удалённое очень хочется вернуть...'],
+    react_return:          ['Давненько не виделись! Я уже начал скучать.'],
+    react_settings_change: ['Новый вид! Мне нравится. Ты явно знаешь, чего хочешь.'],
+    react_calendar:        ['Следишь за датами? Хорошая привычка!'],
+    react_dragged:         ['Неплохой вид отсюда. Спасибо, что нашёл мне место получше!'],
+    // Notepad
+    react_notepad_long: ['Пишешь много! Не забудь сохранить через Файл → Сохранить.'],
+    // Calculator
+    react_calc_divzero: ['Делить на ноль нельзя — математика категорически против!'],
+    react_calc_million: ['Миллионер! В математическом смысле, конечно.'],
+    react_calc_42:      ['42. Ответ на главный вопрос вселенной, жизни и всего такого.'],
+    // Paint
+    react_paint_clear: ['Чистый холст! Отличный повод начать что-то новое.'],
+    react_paint_save:  ['Шедевр сохранён для потомков!'],
+    react_paint_long:  ['Рисуешь уже долго. Настоящий художник!'],
+    // CMD
+    react_cmd_crash:   ['Я же предупреждал! Держись...'],
+    react_cmd_help:    ['Помощь? Я тут! Хотя рабочий стол я знаю чуть лучше, чем cmd.'],
+    react_cmd_unknown: ['Хм, я тоже не знаю эту команду. Мы в одной лодке.'],
+    // Task Manager
+    react_taskkill: ['Процесс завершён! Порядок восстановлен.'],
+    // Minesweeper
+    react_mines_firstclick:  ['Начало положено! Первый ход всегда безопасен.'],
+    react_mines_flag:        ['Правильно! Отмечай подозрительные клетки флажком.'],
+    react_mines_second_loss: ['Ничего, следующая попытка обязательно удачнее...'],
+    // Solitaire
+    react_sol_firstmove: ['Совет: начинай с колонок с наибольшим количеством открытых карт.'],
+    react_sol_stuck:     ['Может, попробовать другую карту? Иногда помогает перетасовать стопку.'],
+    // My Computer
+    react_drive_d:    ['Вот они — твои закладки из браузера! Диск D: всегда с тобой.'],
+    // Folders
+    react_new_folder:  ['Новая папка! Назови её так, чтобы потом легко найти.'],
+    react_drop_folder: ['Аккуратно разложено! Порядок — залог успеха.'],
 };
 
 function clippyShowHelp() {
@@ -5187,9 +5387,9 @@ function clippyShowHelp() {
         actions: [{label:'Сапёр', fn:'clippyOpenMinesweeper'}, {label:'Блокнот', fn:'clippyOpenNotepad'}]
     });
 }
-function clippyOpenMinesweeper() { closeStartMenu(); openApp('minesweeper'); }
+function clippyOpenMinesweeper() { closeStartMenu(); openMinesweeper(); }
 function clippyOpenMyComputer()  { closeStartMenu(); openMyComputer(); }
-function clippyOpenCalculator()  { closeStartMenu(); openApp('calculator'); }
+function clippyOpenCalculator()  { closeStartMenu(); openCalculator(); }
 function clippyOpenNotepad()     { closeStartMenu(); openNotepad(); }
 
 function clippyInit() {
@@ -5236,13 +5436,13 @@ function clippyInit() {
         '  <g id="clippy-face">',
         '    <g id="clippy-eye-l" style="transform-origin: 115px 115px;">',
         '      <circle cx="115" cy="115" r="16" fill="#fff" stroke="#333" stroke-width="2"/>',
-        '      <circle id="clippy-pupil-l" cx="122" cy="115" r="7" fill="#111"/>',
-        '      <circle cx="124" cy="112" r="2.5" fill="#fff"/>',
+        '      <circle id="clippy-pupil-l" cx="115" cy="115" r="7" fill="#111"/>',
+        '      <circle cx="117" cy="112" r="2.5" fill="#fff"/>',
         '    </g>',
         '    <g id="clippy-eye-r" style="transform-origin: 160px 115px;">',
         '      <circle cx="160" cy="115" r="16" fill="#fff" stroke="#333" stroke-width="2"/>',
-        '      <circle id="clippy-pupil-r" cx="167" cy="115" r="7" fill="#111"/>',
-        '      <circle cx="169" cy="112" r="2.5" fill="#fff"/>',
+        '      <circle id="clippy-pupil-r" cx="160" cy="115" r="7" fill="#111"/>',
+        '      <circle cx="162" cy="112" r="2.5" fill="#fff"/>',
         '    </g>',
         '    <path id="clippy-brow-l" d="M 100 95 Q 115 85 130 95" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>',
         '    <path id="clippy-brow-r" d="M 145 95 Q 160 85 175 95" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>',
@@ -5261,13 +5461,69 @@ function clippyInit() {
     });
     _clippyStartBlink();
     _clippyStartLookAround();
+
+    // C2: Зрачки следят за курсором
+    document.addEventListener('mousemove', function(e){
+        var wrapEl = document.getElementById('clippy-wrap');
+        if (!wrapEl) return;
+        var rect = wrapEl.getBoundingClientRect();
+        var faceCX = rect.left + rect.width * 0.5;
+        var faceCY = rect.top  + rect.height * 0.3;
+        var dx = e.clientX - faceCX;
+        var dy = e.clientY - faceCY;
+        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        var t = Math.min(dist, 200) / 200;
+        var ox = (dx / dist) * t * 4;
+        var oy = (dy / dist) * t * 4;
+        var pl = document.getElementById('clippy-pupil-l');
+        var pr = document.getElementById('clippy-pupil-r');
+        if (pl) { pl.setAttribute('cx', 115 + ox); pl.setAttribute('cy', 115 + oy); }
+        if (pr) { pr.setAttribute('cx', 160 + ox); pr.setAttribute('cy', 115 + oy); }
+    });
+
+    // C5: Ховер-поглаживание
+    var _clippyHoverTimer = null;
+    wrap.addEventListener('mouseenter', function(){
+        _clippyHoverTimer = setTimeout(function(){
+            var bub = document.getElementById('clippy-bubble');
+            if (bub && bub.classList.contains('hidden')) {
+                clippySetAnim('wave');
+                _clippyMouthExpr('smile');
+                setTimeout(function(){ _clippyMouthExpr('neutral'); }, 1500);
+            }
+        }, 2000);
+    });
+    wrap.addEventListener('mouseleave', function(){ clearTimeout(_clippyHoverTimer); });
+
+    // C7: Двойной клик — случайный совет
+    wrap.addEventListener('dblclick', function(e){
+        if (e.target.closest('#clippy-bubble')) return;
+        e.preventDefault();
+        clippySay(CLIPPY_MSGS.tip_general, 'think', 7000);
+    });
+
+    // D2+D3: Приветствие с учётом времени суток и возврата после >24ч
+    var _LAST_VISIT_KEY = 'edge_clippy_last_visit';
+    var _lastVisit = parseInt(localStorage.getItem(_LAST_VISIT_KEY) || '0');
+    var _nowTs = Date.now();
+    var _isReturn = (_nowTs - _lastVisit) > 24 * 60 * 60 * 1000 && _lastVisit > 0;
+    localStorage.setItem(_LAST_VISIT_KEY, _nowTs);
     setTimeout(function(){
-        var h = new Date().getHours();
-        var msgs = h < 12 ? CLIPPY_MSGS.greet_morning
-                 : h < 18 ? CLIPPY_MSGS.greet
-                 :           CLIPPY_MSGS.greet_evening;
-        clippySay(msgs, 'wave');
+        if (_isReturn) {
+            clippySay(CLIPPY_MSGS.react_return, 'wave');
+        } else {
+            var h = new Date().getHours();
+            var msgs = h >= 0 && h < 5 ? CLIPPY_MSGS.react_night
+                     : h < 12          ? CLIPPY_MSGS.greet_morning
+                     : h < 18          ? CLIPPY_MSGS.greet
+                     :                   CLIPPY_MSGS.greet_evening;
+            var greetAnim = (h >= 0 && h < 5) ? 'think' : 'wave';
+            clippySay(msgs, greetAnim);
+        }
     }, 2000);
+
+    // C3: Запуск таймера сна
+    _clippyStartSleepTimer();
     _clippyScheduleIdle();
 }
 
@@ -5283,6 +5539,13 @@ function clippySay(msgOrArray, anim, duration) {
     var useAnim = msg.anim || anim || 'talk';
     clippySetAnim(useAnim);
     _clippyMouthExpr('talk');
+    if (_clippyTalkInterval) clearInterval(_clippyTalkInterval);
+    var _talkPhase = true;
+    _clippyTalkInterval = setInterval(function(){
+        _talkPhase = !_talkPhase;
+        _clippyMouthExpr(_talkPhase ? 'talk' : 'neutral');
+    }, 320);
+    if (_clippySleepTimer) { clearTimeout(_clippySleepTimer); _clippySleepTimer = null; }
     var textEl = document.getElementById('clippy-bubble-text');
     var actEl  = document.getElementById('clippy-bubble-actions');
     if (!textEl || !actEl) return;
@@ -5293,17 +5556,25 @@ function clippySay(msgOrArray, anim, duration) {
         btn.className = 'clippy-action-btn';
         btn.textContent = a.label;
         btn.addEventListener('click', function(){
-            if (window[a.fn]) window[a.fn]();
             clippyDismiss();
+            if (window[a.fn]) window[a.fn]();
         });
         actEl.appendChild(btn);
     });
     bubble.classList.remove('hidden');
+    // Не давать пузырю уходить за левый/правый край экрана
+    bubble.style.left = '';
+    var wrapRect = document.getElementById('clippy-wrap').getBoundingClientRect();
+    var defaultLeft = -130;
+    var clampedLeft = Math.max(5 - wrapRect.left, defaultLeft);
+    var clampedRight = window.innerWidth - 230 - wrapRect.left;
+    bubble.style.left = Math.min(clampedLeft > defaultLeft ? clampedLeft : defaultLeft, clampedRight > 0 ? clampedRight : defaultLeft) + 'px';
     clearTimeout(_clippyAnimTimer);
     _clippyAnimTimer = setTimeout(clippyDismiss, duration);
 }
 
 function clippyDismiss() {
+    if (_clippyTalkInterval) { clearInterval(_clippyTalkInterval); _clippyTalkInterval = null; }
     var bubble = document.getElementById('clippy-bubble');
     if (bubble) bubble.classList.add('hidden');
     clippySetAnim('idle');
@@ -5374,30 +5645,125 @@ function _clippyScheduleIdle() {
     clearTimeout(_clippyIdleTimer);
     _clippyIdleTimer = setTimeout(function(){
         var bubble = document.getElementById('clippy-bubble');
-        if (!bubble || bubble.classList.contains('hidden')) {
+        if (!bubble || !bubble.classList.contains('hidden')) return;
+        // C8: с шансом 20% — анимация выглядывания вместо сообщения
+        if (Math.random() < 0.2) {
+            _clippyDoPeek();
+        } else {
             clippySay(CLIPPY_MSGS.idle_random, 'think');
         }
+        _clippyStartSleepTimer();
     }, 4 * 60 * 1000 + Math.random() * 2 * 60 * 1000);
 }
 
+// C8: Выглядывание из-за правого края
+function _clippyDoPeek() {
+    var wrap = document.getElementById('clippy-wrap');
+    if (!wrap) return;
+    wrap.classList.add('clippy-peeking');
+    setTimeout(function(){ wrap.classList.remove('clippy-peeking'); _clippyScheduleIdle(); }, 3100);
+}
+
+// C3: Таймер сна (15 минут бездействия)
+function _clippyStartSleepTimer() {
+    if (_clippySleepTimer) clearTimeout(_clippySleepTimer);
+    _clippySleepTimer = setTimeout(function(){
+        var wrap = document.getElementById('clippy-wrap');
+        var bub  = document.getElementById('clippy-bubble');
+        if (!wrap || !bub || !bub.classList.contains('hidden')) return;
+        clippySetAnim('yawn');
+        _clippyMouthExpr('smile');
+        setTimeout(function(){
+            _clippyMouthExpr('neutral');
+            clippySetAnim('sleep');
+            if (_clippyTalkInterval) { clearInterval(_clippyTalkInterval); _clippyTalkInterval = null; }
+            bub.classList.remove('hidden');
+            var textEl = document.getElementById('clippy-bubble-text');
+            var actEl  = document.getElementById('clippy-bubble-actions');
+            if (textEl) textEl.textContent = 'Zzz...';
+            if (actEl)  actEl.innerHTML = '';
+        }, 2200);
+    }, 15 * 60 * 1000);
+}
+
 function _clippyInitDrag(wrap) {
+    wrap.addEventListener('contextmenu', function(e) {
+        if (e.target.closest('#clippy-bubble')) return;
+        e.preventDefault(); e.stopPropagation();
+        showContextMenu(e.clientX, e.clientY, [
+            {label:'Что ты умеешь?', icon:'❓', action: function(){ clippyShowHelp(); }},
+            {label:'Случайный совет', icon:'💡', action: function(){ clippySay(CLIPPY_MSGS.tip_general, 'think'); }},
+            'sep',
+            {label:'Сапёр',      icon:'💣', action: function(){ openMinesweeper(); }},
+            {label:'Калькулятор', icon:'🔢', action: function(){ openCalculator(); }},
+            {label:'Блокнот',    icon:'📝', action: function(){ openNotepad(); }},
+            {label:'Написать заметку', icon:'✏️', action: function(){
+                openNotepad();
+                setTimeout(function(){
+                    var ta = document.querySelector('.notepad-textarea');
+                    if (ta && !ta.value) ta.value = new Date().toLocaleDateString('ru') + '\n\n';
+                }, 300);
+            }},
+            'sep',
+            {label:'Вернуть в угол', icon:'📌', action: function(){
+                wrap.style.left = ''; wrap.style.top = '';
+                wrap.style.right = '20px'; wrap.style.bottom = '50px';
+                try { localStorage.removeItem('edge_clippy_pos'); } catch(ex){}
+            }},
+            {label:'Скрыть Скрепку', icon:'🚫', danger: true, action: function(){
+                _clippyEnabled = false;
+                localStorage.setItem('edge_clippy_enabled', 'false');
+                clearTimeout(_clippyIdleTimer); clearTimeout(_clippyBlinkTimer);
+                clearTimeout(_clippyLookTimer); clearTimeout(_clippyAnimTimer);
+                clearTimeout(_clippySleepTimer);
+                wrap.remove();
+            }}
+        ]);
+    });
     wrap.addEventListener('mousedown', function(e){
         if (e.target.closest('#clippy-bubble')) return;
         e.preventDefault();
         var sx = e.clientX, sy = e.clientY;
-        // Compute current offset in left/top terms
         var rect = wrap.getBoundingClientRect();
         var ox = rect.left, oy = rect.top;
         wrap.style.right = ''; wrap.style.bottom = '';
         wrap.style.left = ox + 'px'; wrap.style.top = oy + 'px';
+        // C4: Испуг при начале перетаскивания
+        clippySetAnim('alert');
+        _clippyMouthExpr('talk');
+        // C6: Переменные для определения тряски
+        var _shakeLastX = ox, _shakeLastY = oy, _shakePts = 0, _shakeTimer = null;
         function onM(e) {
-            wrap.style.left = Math.max(0, Math.min(window.innerWidth  - 80,  ox + e.clientX - sx)) + 'px';
-            wrap.style.top  = Math.max(0, Math.min(window.innerHeight - 120, oy + e.clientY - sy)) + 'px';
+            var nx = Math.max(0, Math.min(window.innerWidth  - 80,  ox + e.clientX - sx));
+            var ny = Math.max(0, Math.min(window.innerHeight - 120, oy + e.clientY - sy));
+            var speed = Math.sqrt(Math.pow(nx - _shakeLastX, 2) + Math.pow(ny - _shakeLastY, 2));
+            _shakeLastX = nx; _shakeLastY = ny;
+            if (speed > 15) { _shakePts++; } else { _shakePts = Math.max(0, _shakePts - 1); }
+            if (_shakePts > 8 && !_shakeTimer) {
+                _shakePts = 0;
+                clippySetAnim('alert');
+                _clippyMouthExpr('sad');
+                _shakeTimer = setTimeout(function(){
+                    _shakeTimer = null;
+                    clippySay(['Ой-ой-ой! Осторожнее!'], 'alert', 3000);
+                }, 300);
+            }
+            wrap.style.left = nx + 'px';
+            wrap.style.top  = ny + 'px';
         }
         function onU() {
             document.removeEventListener('mousemove', onM);
             document.removeEventListener('mouseup',  onU);
             try { localStorage.setItem('edge_clippy_pos', JSON.stringify({x: wrap.offsetLeft, y: wrap.offsetTop})); } catch(ex){}
+            // C4: Успокоение + фраза после перетаскивания
+            clippySetAnim('idle');
+            _clippyMouthExpr('neutral');
+            var bub = document.getElementById('clippy-bubble');
+            if (bub && bub.classList.contains('hidden')) {
+                setTimeout(function(){
+                    clippySay(CLIPPY_MSGS.react_dragged, 'wave', 4000);
+                }, 500);
+            }
         }
         document.addEventListener('mousemove', onM);
         document.addEventListener('mouseup',   onU);
@@ -5408,8 +5774,10 @@ function _clippyRestorePos(wrap) {
     try {
         var pos = JSON.parse(localStorage.getItem('edge_clippy_pos') || 'null');
         if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            var x = Math.max(0, Math.min(pos.x, window.innerWidth  - 90));
+            var y = Math.max(0, Math.min(pos.y, window.innerHeight - 120));
             wrap.style.right = ''; wrap.style.bottom = '';
-            wrap.style.left = pos.x + 'px'; wrap.style.top = pos.y + 'px';
+            wrap.style.left = x + 'px'; wrap.style.top = y + 'px';
         }
     } catch(e) {}
 }
