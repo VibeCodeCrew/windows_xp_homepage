@@ -141,6 +141,148 @@
     <input type="file" id="bg-upload" accept="image/*" class="hidden">
     <input type="file" id="import-upload" accept=".json" class="hidden">
 
+    <!-- Оверлей мастера первичной настройки (OOBE) -->
+    <div id="setup-overlay" class="setup-overlay hidden">
+        <!-- Синий экран загрузки -->
+        <div id="setup-blue-screen" class="setup-blue-screen">
+            <div class="setup-bs-title">Завершение установки Windows XP...</div>
+            <div class="setup-progress-container">
+                <div class="setup-progress-bar"></div>
+            </div>
+        </div>
+
+        <!-- Окно мастера настройки — XP Installer style -->
+        <div id="setup-oobe-window" class="setup-installer hidden">
+            <!-- Header bar -->
+            <div class="setup-inst-header">
+                <svg class="setup-inst-flag" width="40" height="36" viewBox="0 0 22 20" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="oobe-r" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f86828"/><stop offset="100%" stop-color="#c02010"/></linearGradient>
+                        <linearGradient id="oobe-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#a8d428"/><stop offset="100%" stop-color="#509808"/></linearGradient>
+                        <linearGradient id="oobe-b" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1878ec"/><stop offset="100%" stop-color="#0038b0"/></linearGradient>
+                        <linearGradient id="oobe-y" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffe050"/><stop offset="100%" stop-color="#c87800"/></linearGradient>
+                    </defs>
+                    <path d="M0.5,0.5 C3,0.1 7.5,0.3 9,0.8 L9,8.8 C7.5,9.3 3,9.5 0.5,9.2 Z" fill="url(#oobe-r)"/>
+                    <path d="M10,0.5 C13.5,0.1 18,0.2 21.5,0.5 L21.5,8.5 C18,8.8 13.5,9 10,8.8 Z" fill="url(#oobe-g)"/>
+                    <path d="M0.5,10 C3,10.2 7.5,10.3 9,10.2 L9,19 C7.5,19.5 3,19.8 0.5,19.5 Z" fill="url(#oobe-b)"/>
+                    <path d="M10,10.2 C13.5,10 18,10.2 21.5,10.5 L21.5,19.5 C18,20 13.5,20.5 10,19.5 Z" fill="url(#oobe-y)"/>
+                </svg>
+                <div class="setup-inst-winname">
+                    <div class="setup-inst-microsoft">Microsoft</div>
+                    <div class="setup-inst-windows">Windows<em class="setup-inst-xp"> XP</em></div>
+                </div>
+            </div>
+
+            <!-- Main: sidebar + content -->
+            <div class="setup-inst-main">
+                <!-- Left sidebar -->
+                <div class="setup-inst-sidebar">
+                    <div class="setup-inst-steps">
+                        <div class="setup-inst-item si-done">
+                            <span class="setup-inst-bullet"></span>
+                            <span class="setup-inst-item-label">Сбор<br>сведений</span>
+                        </div>
+                        <div class="setup-inst-item si-done">
+                            <span class="setup-inst-bullet"></span>
+                            <span class="setup-inst-item-label">Динамическое<br>обновление</span>
+                        </div>
+                        <div class="setup-inst-item si-done">
+                            <span class="setup-inst-bullet"></span>
+                            <span class="setup-inst-item-label">Подготовка к<br>установке</span>
+                        </div>
+                        <div class="setup-inst-item" id="oobe-si-install">
+                            <span class="setup-inst-bullet"></span>
+                            <span class="setup-inst-item-label">Установка<br>Windows</span>
+                        </div>
+                        <div class="setup-inst-item" id="oobe-si-finish">
+                            <span class="setup-inst-bullet"></span>
+                            <span class="setup-inst-item-label">Завершение<br>установки</span>
+                        </div>
+                    </div>
+                    <div class="setup-inst-time-block">
+                        <div>Установка будет</div>
+                        <div>завершена через:</div>
+                        <div class="setup-inst-time-val" id="setup-countdown">3 мин.</div>
+                    </div>
+                    <div class="setup-inst-prog-block">
+                        <div class="setup-inst-prog-label">Сохранение параметров</div>
+                        <div class="setup-inst-prog-track">
+                            <div class="setup-inst-prog-fill" id="setup-inst-prog"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right content -->
+                <div class="setup-inst-right">
+                    <!-- Шаг 1 -->
+                    <div id="setup-step-1" class="setup-step active">
+                        <div class="setup-inst-content-head">
+                            <div>
+                                <div class="setup-inst-content-title">Персонализация</div>
+                                <div class="setup-inst-content-sub">Программа использует введённые данные для персонализации Nostalgic Startpage.</div>
+                            </div>
+                            <div class="setup-inst-content-icon">👤</div>
+                        </div>
+                        <div class="setup-inst-hdivider"></div>
+                        <div class="setup-inst-content-body">
+                            <p>Введите ваше имя и название вашей организации:</p>
+                            <div class="setup-field-row">
+                                <label class="setup-field-label">Имя:</label>
+                                <input type="text" id="setup-username-input" class="setup-input" placeholder="User">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Шаг 2 -->
+                    <div id="setup-step-2" class="setup-step">
+                        <div class="setup-inst-content-head">
+                            <div>
+                                <div class="setup-inst-content-title">Импорт закладок</div>
+                                <div class="setup-inst-content-sub">Программа может импортировать часто посещаемые сайты для быстрого доступа.</div>
+                            </div>
+                            <div class="setup-inst-content-icon">🌐</div>
+                        </div>
+                        <div class="setup-inst-hdivider"></div>
+                        <div class="setup-inst-content-body">
+                            <p id="setup-browser-info">Ваш браузер: Неизвестно</p>
+                            <p>Импортируйте ваши топ-8 сайтов для быстрого запуска с рабочего стола.</p>
+                            <button id="setup-import-btn" class="xp-dialog-btn" style="margin-top:12px;">Импортировать топ-8 сайтов</button>
+                            <p id="setup-import-msg" style="color:#00dd00;font-weight:bold;margin-top:10px;display:none;">&#10004; Успешно импортировано!</p>
+                        </div>
+                    </div>
+                    <!-- Шаг 3 -->
+                    <div id="setup-step-3" class="setup-step">
+                        <div class="setup-inst-content-head">
+                            <div>
+                                <div class="setup-inst-content-title">Внешний вид</div>
+                                <div class="setup-inst-content-sub">Выберите режим отображения ярлыков на рабочем столе.</div>
+                            </div>
+                            <div class="setup-inst-content-icon">🖥️</div>
+                        </div>
+                        <div class="setup-inst-hdivider"></div>
+                        <div class="setup-inst-content-body">
+                            <label class="setup-radio-label"><input type="radio" name="setup-view" value="icon"><b>Значки</b><div class="setup-help-text">Классические иконки рабочего стола в стиле XP.</div></label>
+                            <label class="setup-radio-label"><input type="radio" name="setup-view" value="glass" checked><b>Плитки</b><div class="setup-help-text">Современные стеклянные плитки с размытием фона.</div></label>
+                            <label class="setup-radio-label"><input type="radio" name="setup-view" value="window"><b>Миниатюры</b><div class="setup-help-text">Ярлыки в виде небольших окон с превью сайтов.</div></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom footer -->
+            <div class="setup-inst-footer">
+                <div class="setup-inst-nav-dots" id="setup-nav-dots">
+                    <span class="setup-nav-dot active"></span>
+                    <span class="setup-nav-dot"></span>
+                    <span class="setup-nav-dot"></span>
+                </div>
+                <div class="setup-inst-nav-btns">
+                    <button id="setup-back-btn" class="xp-dialog-btn" disabled>&lt; Назад</button>
+                    <button id="setup-next-btn" class="xp-dialog-btn">Далее &gt;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+сchrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'capture_screenshot') {
         captureTab(message.url, sendResponse);
         return true;

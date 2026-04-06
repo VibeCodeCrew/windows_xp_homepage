@@ -22,7 +22,9 @@ Nostalgic Startpage turns every new browser tab into a nostalgic Windows XP desk
 
 **Start Menu**
 - Classic two-column XP Start Menu
-- All Programs panel with collapsible folders: Games and Programs (mirrors desktop shortcuts)
+- All Programs panel with collapsible folders (closed by default):
+  - **Games** — Minesweeper, Solitaire, Hearts, Pinball
+  - **Programs → Accessories** — all built-in tools; desktop folders appear here automatically with their contents
 - Shutdown dialog
 
 **My Computer**
@@ -59,6 +61,7 @@ Nostalgic Startpage turns every new browser tab into a nostalgic Windows XP desk
 - Run Dialog — URL bar with history autocomplete
 - Export / Import all data as JSON
 - One-click update download from GitHub
+- First-run setup wizard styled after the Windows XP installer (full-screen, step sidebar, progress bar)
 
 ### Installation
 
@@ -117,7 +120,9 @@ Nostalgic Startpage заменяет каждую новую вкладку бр
 
 **Меню «Пуск»**
 - Классическое двухколоночное меню Windows XP
-- Панель «Все программы» с сворачиваемыми папками: Игры и Программы (копия ярлыков с рабочего стола)
+- Панель «Все программы» со сворачиваемыми папками (закрыты по умолчанию):
+  - **Игры** — Сапёр, Косынка, Червы, Пинбол
+  - **Программы → Стандартные** — все встроенные инструменты; папки с рабочего стола отображаются здесь автоматически вместе с содержимым
 - Диалог завершения работы
 
 **Мой компьютер**
@@ -154,6 +159,7 @@ Nostalgic Startpage заменяет каждую новую вкладку бр
 - Диалог «Выполнить» — адресная строка с историей URL
 - Экспорт / Импорт всех данных в формате JSON
 - Скачивание обновления с GitHub в один клик
+- Мастер первоначальной настройки в стиле инсталлятора Windows XP (полноэкранный, боковая панель шагов, прогресс-бар)
 
 ### Установка
 

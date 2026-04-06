@@ -2364,29 +2364,41 @@ function openAllPrograms() {
     if (!panel || !list) return;
     list.innerHTML = '';
 
-    // Папка: Игры
+    // Папка: Игры (закрыта по умолчанию)
     var gameItems = [
-        { name:'Сапёр',   action: function(){ closeStartMenu(); openMinesweeper(); } },
-        { name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
-        { name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
-        { name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
+        { icon:'💣', name:'Сапёр',   action: function(){ closeStartMenu(); openMinesweeper(); } },
+        { icon:'♠',  name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
+        { icon:'♥',  name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
+        { icon:'⚫', name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
     ];
-    list.appendChild(makeFolderBlock('🎮 Игры', gameItems, true));
+    list.appendChild(makeFolderBlock('Игры', gameItems, false));
 
-    // Папка: Программы — встроенные + ярлыки с рабочего стола
+    // Подпапка: Стандартные (встроенные инструменты)
     var builtins = [
-        { name:'Блокнот',          action: function(){ closeStartMenu(); openNotepad(); } },
-        { name:'WordPad',          action: function(){ closeStartMenu(); openWordPad(); } },
-        { name:'Paint',            action: function(){ closeStartMenu(); openPaint(); } },
-        { name:'Калькулятор',      action: function(){ closeStartMenu(); openCalculator(); } },
-        { name:'Командная строка', action: function(){ closeStartMenu(); openCmd(); } },
-        { name:'Диспетчер задач',  action: function(){ closeStartMenu(); openTaskManager(); } },
+        { icon:'📝', name:'Блокнот',          action: function(){ closeStartMenu(); openNotepad(); } },
+        { icon:'📃', name:'WordPad',          action: function(){ closeStartMenu(); openWordPad(); } },
+        { icon:'🎨', name:'Paint',            action: function(){ closeStartMenu(); openPaint(); } },
+        { icon:'🧮', name:'Калькулятор',      action: function(){ closeStartMenu(); openCalculator(); } },
+        { icon:'⬛', name:'Командная строка', action: function(){ closeStartMenu(); openCmd(); } },
+        { icon:'📊', name:'Диспетчер задач',  action: function(){ closeStartMenu(); openTaskManager(); } },
     ];
+
+    // Папка: Программы — «Стандартные» + папки рабочего стола + одиночные ярлыки
+    var desktopFolders = links.filter(function(i){ return i.isFolder && i.items && i.items.length; }).map(function(folder){
+        var folderChildren = folder.items.map(function(child){
+            return { name: child.name, favicon: child.customIcon || getFaviconUrl(child.url),
+                     action: (function(u){ return function(){ closeStartMenu(); navToUrl(u); }; })(child.url) };
+        });
+        return { subFolder: true, name: folder.name, items: folderChildren };
+    });
     var progItems = links.filter(function(i){ return !i.isFolder; }).map(function(i){
         return { name: i.name, favicon: i.customIcon || getFaviconUrl(i.url),
-                 action: function(){ closeStartMenu(); navToUrl(i.url); } };
+                 action: (function(u){ return function(){ closeStartMenu(); navToUrl(u); }; })(i.url) };
     });
-    list.appendChild(makeFolderBlock('📁 Программы', builtins.concat(progItems), false));
+    var progFolderItems = [{ subFolder: true, name: 'Стандартные', items: builtins }]
+        .concat(desktopFolders)
+        .concat(progItems);
+    list.appendChild(makeFolderBlock('Программы', progFolderItems, false));
 
     panel.classList.remove('hidden');
 }
@@ -2410,9 +2422,17 @@ function makeFolderBlock(title, items, openByDefault) {
     if (!openByDefault) body.classList.add('hidden');
 
     items.forEach(function(item){
+        if (item.subFolder) {
+            var sub = makeFolderBlock(item.name, item.items, false);
+            sub.classList.add('sm-prog-subfolder');
+            body.appendChild(sub);
+            return;
+        }
         var el = document.createElement('div');
         el.className = 'sm-prog-item sm-prog-item-indent';
-        if (item.favicon) {
+        if (item.icon) {
+            el.innerHTML = '<span class="sm-prog-no-icon">' + item.icon + '</span><span>' + escapeHtml(item.name) + '</span>';
+        } else if (item.favicon) {
             el.innerHTML = '<img class="sm-prog-favicon" src="' + escapeHtml(item.favicon) + '" alt="" onerror="this.style.display=\'none\'"><span>' + escapeHtml(item.name) + '</span>';
         } else {
             el.innerHTML = '<span class="sm-prog-no-icon">📄</span><span>' + escapeHtml(item.name) + '</span>';
@@ -2425,7 +2445,7 @@ function makeFolderBlock(title, items, openByDefault) {
     hdr.addEventListener('click', function(){
         var isOpen = !body.classList.contains('hidden');
         body.classList.toggle('hidden', isOpen);
-        wrap.querySelector('.sm-prog-folder-arrow').textContent = isOpen ? '▸' : '▾';
+        hdr.querySelector('.sm-prog-folder-arrow').textContent = isOpen ? '▸' : '▾';
     });
     return wrap;
 }
@@ -5896,7 +5916,7 @@ window.addEventListener('resize', function() {
 });
 
 // ==================== INIT ====================
-document.addEventListener('DOMContentLoaded', function() {
+function runStandardInit() {
     applyBackground();
     const smUser = document.querySelector('.sm-username');
     if (smUser) smUser.textContent = username;
@@ -5999,4 +6019,149 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
     });
+}
+
+function initSetupOOBE(onComplete) {
+    const overlay = document.getElementById('setup-overlay');
+    const blueScreen = document.getElementById('setup-blue-screen');
+    const oobeWindow = document.getElementById('setup-oobe-window');
+
+    if (!overlay) {
+        onComplete();
+        return;
+    }
+
+    overlay.classList.remove('hidden');
+
+    let countdownSec = 3 * 60;
+    let countdownTimer = null;
+    function fmtCountdown(s) { return s >= 60 ? Math.ceil(s / 60) + ' мин.' : s + ' сек.'; }
+
+    setTimeout(function() {
+        blueScreen.classList.add('hidden');
+        oobeWindow.classList.remove('hidden');
+
+        // Countdown
+        var cdEl = document.getElementById('setup-countdown');
+        if (cdEl) cdEl.textContent = fmtCountdown(countdownSec);
+        countdownTimer = setInterval(function() {
+            countdownSec = Math.max(0, countdownSec - 5);
+            if (cdEl) cdEl.textContent = fmtCountdown(countdownSec);
+        }, 5000);
+
+        // Progress bar animation
+        var progEl = document.getElementById('setup-inst-prog');
+        if (progEl) {
+            var progVal = 0;
+            var progTimer = setInterval(function() {
+                progVal = Math.min(progVal + Math.random() * 9 + 1, 95);
+                progEl.style.width = progVal + '%';
+                if (progVal >= 95) clearInterval(progTimer);
+            }, 700);
+        }
+    }, 3000);
+
+    let currentStep = 1;
+    const totalSteps = 3;
+    const backBtn = document.getElementById('setup-back-btn');
+    const nextBtn = document.getElementById('setup-next-btn');
+
+    function updateSidebarSteps() {
+        var elInstall = document.getElementById('oobe-si-install');
+        var elFinish  = document.getElementById('oobe-si-finish');
+        if (elInstall && elFinish) {
+            if (currentStep <= 2) {
+                elInstall.className = 'setup-inst-item si-current';
+                elFinish.className  = 'setup-inst-item';
+            } else {
+                elInstall.className = 'setup-inst-item si-done';
+                elFinish.className  = 'setup-inst-item si-current';
+            }
+        }
+        var dots = document.querySelectorAll('#setup-nav-dots .setup-nav-dot');
+        dots.forEach(function(dot, i) { dot.classList.toggle('active', i === currentStep - 1); });
+    }
+
+    function updateSteps() {
+        for (let i = 1; i <= totalSteps; i++) {
+            const stepEl = document.getElementById('setup-step-' + i);
+            if (stepEl) {
+                if (i === currentStep) stepEl.classList.add('active');
+                else stepEl.classList.remove('active');
+            }
+        }
+        backBtn.disabled = (currentStep === 1);
+        nextBtn.textContent = (currentStep === totalSteps) ? 'Готово' : 'Далее >';
+        updateSidebarSteps();
+    }
+
+    const browserInfo = document.getElementById('setup-browser-info');
+    if (browserInfo) {
+        let browserName = "Неизвестный браузер";
+        const ua = navigator.userAgent;
+        if (ua.indexOf("Edg") > -1) browserName = "Microsoft Edge";
+        else if (ua.indexOf("Chrome") > -1) browserName = "Google Chrome";
+        else if (ua.indexOf("Firefox") > -1) browserName = "Mozilla Firefox";
+        browserInfo.textContent = "Ваш браузер: " + browserName;
+    }
+
+    const importBtn = document.getElementById('setup-import-btn');
+    if (importBtn) {
+        importBtn.addEventListener('click', function() {
+            if (chrome && chrome.topSites && chrome.topSites.get) {
+                chrome.topSites.get(function(sites) {
+                    const top = sites.slice(0, 8);
+                    top.forEach(function(site) {
+                        links.push({ name: site.title || site.url, url: site.url });
+                    });
+                    saveLinks();
+                    const msg = document.getElementById('setup-import-msg');
+                    if (msg) msg.style.display = 'block';
+                    importBtn.disabled = true;
+                });
+            } else {
+                alert("Импорт недоступен. Проверьте разрешения.");
+            }
+        });
+    }
+
+    backBtn.addEventListener('click', function() {
+        if (currentStep > 1) { currentStep--; updateSteps(); }
+    });
+
+    nextBtn.addEventListener('click', function() {
+        if (currentStep === 1) {
+            const nameInput = document.getElementById('setup-username-input');
+            if (nameInput && nameInput.value.trim()) {
+                username = nameInput.value.trim();
+                localStorage.setItem(STORAGE.username, username);
+            }
+        }
+        if (currentStep < totalSteps) {
+            currentStep++; updateSteps();
+        } else {
+            const selectedView = document.querySelector('input[name="setup-view"]:checked');
+            if (selectedView) {
+                settings.viewMode = selectedView.value;
+                localStorage.setItem(STORAGE.viewMode, settings.viewMode);
+            }
+            clearInterval(countdownTimer);
+            localStorage.setItem('xp_setup_done', 'true');
+            overlay.classList.add('hidden');
+            showXPBoot(function() {
+                onComplete(); // Инициализация десктопа
+                try { new Audio('startup.mp3').play(); } catch(e) {}
+            });
+        }
+    });
+
+    updateSteps();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (!localStorage.getItem('xp_setup_done')) {
+        initSetupOOBE(runStandardInit);
+    } else {
+        runStandardInit();
+    }
 });

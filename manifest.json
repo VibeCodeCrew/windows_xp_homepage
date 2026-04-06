@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nostalgic Startpage",
-  "version": "1.2",
+  "version": "1.4",
   "permissions": [
     "tabs",
     "bookmarks",
@@ -9,7 +9,8 @@
     "storage",
     "windows",
     "history",
-    "downloads"
+    "downloads",
+    "topSites"
   ],
   "background": {
     "service_worker": "background.js"
