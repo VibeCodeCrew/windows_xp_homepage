@@ -40,67 +40,72 @@
 
     <!-- Start Menu -->
     <div id="start-menu" class="hidden">
+        <!-- Header: avatar + username -->
         <div class="sm-header">
-            <div class="sm-avatar">&#128100;</div>
+            <div class="sm-avatar"><img id="sm-avatar-img" src="avatars/guest.bmp" alt="&#128100;" style="width:100%;height:100%;object-fit:cover;border-radius:3px"></div>
             <div class="sm-username">User</div>
         </div>
         <div class="sm-body">
+            <!-- All Programs overlay -->
             <div id="sm-all-programs" class="hidden">
                 <div class="sm-back-btn">
                     <span class="sm-icon">&#9664;</span>Назад
                 </div>
                 <div id="sm-programs-list"></div>
             </div>
+            <!-- Left column -->
             <div class="sm-left">
-                <div class="sm-item" data-action="search">
-                    <span class="sm-icon">&#128269;</span>Поиск в интернете
+                <!-- Pinned top items (icon + name + subtitle) -->
+                <div class="sm-pinned-item" data-action="search">
+                    <span class="sm-pinned-icon">&#127760;</span>
+                    <div>
+                        <div class="sm-pinned-name">Интернет</div>
+                        <div class="sm-pinned-sub">Поиск в интернете</div>
+                    </div>
                 </div>
-                <div class="sm-separator"></div>
-                <div class="sm-item" data-action="notepad">
-                    <span class="sm-icon">&#128221;</span>Блокнот
+                <div class="sm-pinned-item" data-action="notepad">
+                    <span class="sm-pinned-icon">&#128221;</span>
+                    <div>
+                        <div class="sm-pinned-name">Блокнот</div>
+                        <div class="sm-pinned-sub">Текстовый редактор</div>
+                    </div>
                 </div>
-                <div class="sm-item" data-action="calculator">
-                    <span class="sm-icon">&#128290;</span>Калькулятор
+                <!-- Separator -->
+                <div class="sm-full-sep"></div>
+                <!-- MRU programs (flex:1 — fills available space) -->
+                <div class="sm-mru">
+                    <div class="sm-item" data-action="calculator">
+                        <span class="sm-icon">&#129518;</span>Калькулятор
+                    </div>
+                    <div class="sm-item" data-action="minesweeper">
+                        <span class="sm-icon">&#128163;</span>Сапёр
+                    </div>
+                    <div class="sm-item" data-action="solitaire">
+                        <span class="sm-icon">&#9824;</span>Косынка
+                    </div>
+                    <div class="sm-item" data-action="hearts">
+                        <span class="sm-icon">&#9829;</span>Червы
+                    </div>
+                    <div class="sm-item" data-action="paint">
+                        <span class="sm-icon">&#127912;</span>Paint
+                    </div>
+                    <div class="sm-item" data-action="wordpad">
+                        <span class="sm-icon">&#128196;</span>WordPad
+                    </div>
                 </div>
-                <div class="sm-item" data-action="minesweeper">
-                    <span class="sm-icon">&#128163;</span>Сапёр
-                </div>
-                <div class="sm-item" data-action="solitaire">
-                    <span class="sm-icon">&#9824;</span>Косынка
-                </div>
-                <div class="sm-item" data-action="hearts">
-                    <span class="sm-icon">&#9829;</span>Червы
-                </div>
-                <div class="sm-item" data-action="pinball">
-                    <span class="sm-icon">&#9899;</span>Пинбол
-                </div>
-                <div class="sm-item" data-action="paint">
-                    <span class="sm-icon">&#127912;</span>Paint
-                </div>
-                <div class="sm-item" data-action="wordpad">
-                    <span class="sm-icon">&#128196;</span>WordPad
-                </div>
-                <div class="sm-item" data-action="cmd">
-                    <span class="sm-icon">&#9744;</span>Командная строка
-                </div>
-                <div class="sm-separator"></div>
-                <div class="sm-item" data-action="settings">
-                    <span class="sm-icon">&#9881;</span>Настройки
-                </div>
-                <div class="sm-separator"></div>
-                <div class="sm-item" data-action="run">
-                    <span class="sm-icon">&#9654;</span>Выполнить...
-                </div>
-                <div class="sm-item" data-action="taskmgr">
-                    <span class="sm-icon">&#128202;</span>Диспетчер задач
-                </div>
-                <div class="sm-separator"></div>
-                <div class="sm-item sm-allprograms-btn" data-action="allprograms">
-                    <span class="sm-icon">&#128196;</span>Все программы
-                    <span class="sm-allprograms-arrow">&#9658;</span>
+                <!-- All Programs — always at the bottom -->
+                <div class="sm-allprograms-bar">
+                    <div class="sm-item sm-allprograms-btn" data-action="allprograms">
+                        <span class="sm-icon">&#128193;</span><span>Все программы</span>
+                        <span class="sm-allprograms-arrow">&#9658;</span>
+                    </div>
                 </div>
             </div>
+            <!-- Right column (system items, like XP) -->
             <div class="sm-right">
+                <div class="sm-item" data-action="wordpad">
+                    <span class="sm-icon">&#128196;</span>Мои документы
+                </div>
                 <div class="sm-item" data-action="mycomputer">
                     <span class="sm-icon">&#128421;</span>Мой компьютер
                 </div>
@@ -108,11 +113,24 @@
                     <span class="sm-icon">&#128465;</span>Корзина
                 </div>
                 <div class="sm-separator"></div>
+                <div class="sm-item" data-action="settings">
+                    <span class="sm-icon">&#9881;</span>Панель управления
+                </div>
                 <div class="sm-item" data-action="setbg">
-                    <span class="sm-icon">&#128444;</span>Свой фон
+                    <span class="sm-icon">&#128444;</span>Фон рабочего стола
                 </div>
                 <div class="sm-item" data-action="removebg">
                     <span class="sm-icon">&#10060;</span>Сбросить фон
+                </div>
+                <div class="sm-separator"></div>
+                <div class="sm-item" data-action="search">
+                    <span class="sm-icon">&#128269;</span>Поиск
+                </div>
+                <div class="sm-item" data-action="run">
+                    <span class="sm-icon">&#9654;</span>Выполнить...
+                </div>
+                <div class="sm-item" data-action="taskmgr">
+                    <span class="sm-icon">&#128202;</span>Диспетчер задач
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="export">
@@ -121,15 +139,15 @@
                 <div class="sm-item" data-action="import">
                     <span class="sm-icon">&#128193;</span>Импорт данных
                 </div>
-                <div class="sm-separator"></div>
                 <div class="sm-item" data-action="update">
-                    <span class="sm-icon">🔄</span>Обновить Windows XP
+                    <span class="sm-icon">&#128260;</span>Обновление
                 </div>
             </div>
         </div>
+        <!-- Footer -->
         <div class="sm-footer">
             <button class="sm-shutdown-btn" data-action="shutdown">
-                <span class="sm-shutdown-icon">&#9211;</span> Завершение работы
+                &#9211; Завершение работы
             </button>
         </div>
     </div>
@@ -230,6 +248,41 @@
                                 <label class="setup-field-label">Имя:</label>
                                 <input type="text" id="setup-username-input" class="setup-input" placeholder="User">
                             </div>
+                            <div class="setup-field-row" style="margin-top:14px;align-items:flex-start">
+                                <label class="setup-field-label" style="padding-top:4px">Рисунок:</label>
+                                <div>
+                                    <div class="setup-avatar-grid" id="setup-avatar-grid">
+                                        <div class="setup-avatar-item" data-src="avatars/airplane.bmp"><img src="avatars/airplane.bmp" alt="airplane"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/astronaut.bmp"><img src="avatars/astronaut.bmp" alt="astronaut"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/ball.bmp"><img src="avatars/ball.bmp" alt="ball"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/beach.bmp"><img src="avatars/beach.bmp" alt="beach"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/butterfly.bmp"><img src="avatars/butterfly.bmp" alt="butterfly"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/car.bmp"><img src="avatars/car.bmp" alt="car"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/cat.bmp"><img src="avatars/cat.bmp" alt="cat"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/chess.bmp"><img src="avatars/chess.bmp" alt="chess"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/dirt bike.bmp"><img src="avatars/dirt bike.bmp" alt="dirt bike"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/dog.bmp"><img src="avatars/dog.bmp" alt="dog"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/drip.bmp"><img src="avatars/drip.bmp" alt="drip"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/duck.bmp"><img src="avatars/duck.bmp" alt="duck"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/fish.bmp"><img src="avatars/fish.bmp" alt="fish"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/frog.bmp"><img src="avatars/frog.bmp" alt="frog"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/guest.bmp"><img src="avatars/guest.bmp" alt="guest"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/guitar.bmp"><img src="avatars/guitar.bmp" alt="guitar"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/horses.bmp"><img src="avatars/horses.bmp" alt="horses"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/kick.bmp"><img src="avatars/kick.bmp" alt="kick"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/lift-off.bmp"><img src="avatars/lift-off.bmp" alt="lift-off"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/palm tree.bmp"><img src="avatars/palm tree.bmp" alt="palm tree"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/pink flower.bmp"><img src="avatars/pink flower.bmp" alt="pink flower"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/red flower.bmp"><img src="avatars/red flower.bmp" alt="red flower"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/skater.bmp"><img src="avatars/skater.bmp" alt="skater"></div>
+                                        <div class="setup-avatar-item" data-src="avatars/snowflake.bmp"><img src="avatars/snowflake.bmp" alt="snowflake"></div>
+                                    </div>
+                                    <label class="setup-avatar-browse" id="setup-avatar-browse-btn">
+                                        <span>🔍</span> Поиск рисунков...
+                                        <input type="file" id="setup-avatar-upload" accept="image/*" style="display:none">
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <!-- Шаг 2 -->
@@ -279,6 +332,56 @@
                     <button id="setup-back-btn" class="xp-dialog-btn" disabled>&lt; Назад</button>
                     <button id="setup-next-btn" class="xp-dialog-btn">Далее &gt;</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avatar Picker Dialog -->
+    <div id="avatar-picker-overlay" class="avatar-picker-overlay hidden">
+        <div class="avatar-picker-win">
+            <div class="avatar-picker-titlebar">
+                <div class="avatar-picker-titlebar-left">
+                    <span class="avatar-picker-titlebar-icon">👤</span>
+                    <span>Выбор рисунка для учётной записи</span>
+                </div>
+                <div class="avatar-picker-close" id="avatar-picker-close">✕</div>
+            </div>
+            <div class="avatar-picker-body">
+                <p>Выбранный рисунок будет отображаться на экране приветствия.<br>
+                <label class="setup-avatar-browse" id="ap-browse-btn" style="display:inline-flex;margin-top:0">
+                    <span>🔍</span> Поиск рисунков...
+                    <input type="file" id="ap-avatar-upload" accept="image/*" style="display:none">
+                </label></p>
+                <div class="avatar-picker-grid" id="ap-avatar-grid">
+                    <div class="setup-avatar-item" data-src="avatars/airplane.bmp"><img src="avatars/airplane.bmp" alt="airplane"></div>
+                    <div class="setup-avatar-item" data-src="avatars/astronaut.bmp"><img src="avatars/astronaut.bmp" alt="astronaut"></div>
+                    <div class="setup-avatar-item" data-src="avatars/ball.bmp"><img src="avatars/ball.bmp" alt="ball"></div>
+                    <div class="setup-avatar-item" data-src="avatars/beach.bmp"><img src="avatars/beach.bmp" alt="beach"></div>
+                    <div class="setup-avatar-item" data-src="avatars/butterfly.bmp"><img src="avatars/butterfly.bmp" alt="butterfly"></div>
+                    <div class="setup-avatar-item" data-src="avatars/car.bmp"><img src="avatars/car.bmp" alt="car"></div>
+                    <div class="setup-avatar-item" data-src="avatars/cat.bmp"><img src="avatars/cat.bmp" alt="cat"></div>
+                    <div class="setup-avatar-item" data-src="avatars/chess.bmp"><img src="avatars/chess.bmp" alt="chess"></div>
+                    <div class="setup-avatar-item" data-src="avatars/dirt bike.bmp"><img src="avatars/dirt bike.bmp" alt="dirt bike"></div>
+                    <div class="setup-avatar-item" data-src="avatars/dog.bmp"><img src="avatars/dog.bmp" alt="dog"></div>
+                    <div class="setup-avatar-item" data-src="avatars/drip.bmp"><img src="avatars/drip.bmp" alt="drip"></div>
+                    <div class="setup-avatar-item" data-src="avatars/duck.bmp"><img src="avatars/duck.bmp" alt="duck"></div>
+                    <div class="setup-avatar-item" data-src="avatars/fish.bmp"><img src="avatars/fish.bmp" alt="fish"></div>
+                    <div class="setup-avatar-item" data-src="avatars/frog.bmp"><img src="avatars/frog.bmp" alt="frog"></div>
+                    <div class="setup-avatar-item" data-src="avatars/guest.bmp"><img src="avatars/guest.bmp" alt="guest"></div>
+                    <div class="setup-avatar-item" data-src="avatars/guitar.bmp"><img src="avatars/guitar.bmp" alt="guitar"></div>
+                    <div class="setup-avatar-item" data-src="avatars/horses.bmp"><img src="avatars/horses.bmp" alt="horses"></div>
+                    <div class="setup-avatar-item" data-src="avatars/kick.bmp"><img src="avatars/kick.bmp" alt="kick"></div>
+                    <div class="setup-avatar-item" data-src="avatars/lift-off.bmp"><img src="avatars/lift-off.bmp" alt="lift-off"></div>
+                    <div class="setup-avatar-item" data-src="avatars/palm tree.bmp"><img src="avatars/palm tree.bmp" alt="palm tree"></div>
+                    <div class="setup-avatar-item" data-src="avatars/pink flower.bmp"><img src="avatars/pink flower.bmp" alt="pink flower"></div>
+                    <div class="setup-avatar-item" data-src="avatars/red flower.bmp"><img src="avatars/red flower.bmp" alt="red flower"></div>
+                    <div class="setup-avatar-item" data-src="avatars/skater.bmp"><img src="avatars/skater.bmp" alt="skater"></div>
+                    <div class="setup-avatar-item" data-src="avatars/snowflake.bmp"><img src="avatars/snowflake.bmp" alt="snowflake"></div>
+                </div>
+            </div>
+            <div class="avatar-picker-footer">
+                <button class="xp-dialog-btn xp-dialog-btn-primary" id="ap-ok-btn">Изменить рисунок</button>
+                <button class="xp-dialog-btn" id="ap-cancel-btn">Отмена</button>
             </div>
         </div>
     </div>
