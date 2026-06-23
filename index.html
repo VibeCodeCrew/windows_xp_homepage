@@ -14,24 +14,24 @@
 
     <!-- Taskbar -->
     <div id="taskbar">
-        <button id="start-btn">
+        <button id="start-btn" aria-label="Пуск" aria-haspopup="menu" aria-expanded="false">
             <span class="start-logo"><svg class="start-flag" width="18" height="16" viewBox="0 0 22 20" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sf-r" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f86828"/><stop offset="100%" stop-color="#c02010"/></linearGradient><linearGradient id="sf-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#a8d428"/><stop offset="100%" stop-color="#509808"/></linearGradient><linearGradient id="sf-b" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1878ec"/><stop offset="100%" stop-color="#0038b0"/></linearGradient><linearGradient id="sf-y" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffe050"/><stop offset="100%" stop-color="#c87800"/></linearGradient></defs><path d="M0.5,0.5 C3,0.1 7.5,0.3 9,0.8 L9,8.8 C7.5,9.3 3,9.5 0.5,9.2 Z" fill="url(#sf-r)"/><path d="M10,0.5 C13.5,0.1 18,0.2 21.5,0.5 L21.5,8.5 C18,8.8 13.5,9 10,8.8 Z" fill="url(#sf-g)"/><path d="M0.5,10 C3,10.2 7.5,10.3 9,10.2 L9,19 C7.5,19.5 3,19.8 0.5,19.5 Z" fill="url(#sf-b)"/><path d="M10,10.2 C13.5,10 18,10.2 21.5,10.5 L21.5,19.5 C18,20 13.5,20.5 10,19.5 Z" fill="url(#sf-y)"/></svg></span>
             <span class="start-label">Пуск</span>
         </button>
         <div id="taskbar-sep"></div>
         <div id="quick-launch">
-            <button class="ql-btn" id="ql-newtab"    title="Новая вкладка">🌐</button>
-            <button class="ql-btn" id="ql-search"    title="Поиск">🔍</button>
-            <button class="ql-btn" id="ql-mycomputer"title="Мой компьютер">💻</button>
-            <button class="ql-btn" id="ql-notepad"   title="Блокнот">📝</button>
-            <button class="ql-btn" id="ql-sticky"    title="Стикер">📌</button>
+            <button class="ql-btn" id="ql-newtab"    title="Новая вкладка" aria-label="Новая вкладка">🌐</button>
+            <button class="ql-btn" id="ql-search"    title="Поиск" aria-label="Поиск">🔍</button>
+            <button class="ql-btn" id="ql-mycomputer"title="Мой компьютер" aria-label="Мой компьютер">💻</button>
+            <button class="ql-btn" id="ql-notepad"   title="Блокнот" aria-label="Блокнот">📝</button>
+            <button class="ql-btn" id="ql-sticky"    title="Стикер" aria-label="Стикер">📌</button>
         </div>
         <div class="taskbar-sep-thin"></div>
         <div id="taskbar-windows"></div>
-        <div id="systray">
-            <div id="tray-update" title="Доступно обновление — нажмите для установки" class="hidden">🔔</div>
-            <div id="tray-volume" title="Громкость">🔊</div>
-            <div id="tray-clock">
+        <div id="systray" role="region" aria-label="Область уведомлений">
+            <div id="tray-update" title="Доступно обновление — нажмите для установки" class="hidden" role="button" aria-label="Доступно обновление">🔔</div>
+            <div id="tray-volume" title="Громкость" role="button" aria-label="Громкость">🔊</div>
+            <div id="tray-clock" role="button" aria-label="Часы и календарь">
                 <div id="tray-time">00:00</div>
                 <div id="tray-date">дата</div>
             </div>
@@ -160,7 +160,7 @@
     <input type="file" id="import-upload" accept=".json" class="hidden">
 
     <!-- Оверлей мастера первичной настройки (OOBE) -->
-    <div id="setup-overlay" class="setup-overlay hidden">
+    <div id="setup-overlay" class="setup-overlay hidden" role="dialog" aria-modal="true" aria-label="Мастер установки Nostalgic Startpage">
         <!-- Синий экран загрузки -->
         <div id="setup-blue-screen" class="setup-blue-screen">
             <div class="setup-bs-title">Завершение установки Windows XP...</div>
@@ -245,13 +245,13 @@
                         <div class="setup-inst-content-body">
                             <p>Введите ваше имя и название вашей организации:</p>
                             <div class="setup-field-row">
-                                <label class="setup-field-label">Имя:</label>
+                                <label class="setup-field-label" for="setup-username-input">Имя:</label>
                                 <input type="text" id="setup-username-input" class="setup-input" placeholder="User">
                             </div>
                             <div class="setup-field-row" style="margin-top:14px;align-items:flex-start">
                                 <label class="setup-field-label" style="padding-top:4px">Рисунок:</label>
                                 <div>
-                                    <div class="setup-avatar-grid" id="setup-avatar-grid">
+                                    <div class="setup-avatar-grid" id="setup-avatar-grid" role="radiogroup" aria-label="Выбор аватара">
                                         <div class="setup-avatar-item" data-src="avatars/airplane.bmp"><img src="avatars/airplane.bmp" alt="airplane"></div>
                                         <div class="setup-avatar-item" data-src="avatars/astronaut.bmp"><img src="avatars/astronaut.bmp" alt="astronaut"></div>
                                         <div class="setup-avatar-item" data-src="avatars/ball.bmp"><img src="avatars/ball.bmp" alt="ball"></div>
@@ -337,14 +337,14 @@
     </div>
 
     <!-- Avatar Picker Dialog -->
-    <div id="avatar-picker-overlay" class="avatar-picker-overlay hidden">
+    <div id="avatar-picker-overlay" class="avatar-picker-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="avatar-picker-title">
         <div class="avatar-picker-win">
             <div class="avatar-picker-titlebar">
                 <div class="avatar-picker-titlebar-left">
                     <span class="avatar-picker-titlebar-icon">👤</span>
-                    <span>Выбор рисунка для учётной записи</span>
+                    <span id="avatar-picker-title">Выбор рисунка для учётной записи</span>
                 </div>
-                <div class="avatar-picker-close" id="avatar-picker-close">✕</div>
+                <div class="avatar-picker-close" id="avatar-picker-close" role="button" aria-label="Закрыть">✕</div>
             </div>
             <div class="avatar-picker-body">
                 <p>Выбранный рисунок будет отображаться на экране приветствия.<br>
@@ -352,7 +352,7 @@
                     <span>🔍</span> Поиск рисунков...
                     <input type="file" id="ap-avatar-upload" accept="image/*" style="display:none">
                 </label></p>
-                <div class="avatar-picker-grid" id="ap-avatar-grid">
+                <div class="avatar-picker-grid" id="ap-avatar-grid" role="radiogroup" aria-label="Выбор аватара">
                     <div class="setup-avatar-item" data-src="avatars/airplane.bmp"><img src="avatars/airplane.bmp" alt="airplane"></div>
                     <div class="setup-avatar-item" data-src="avatars/astronaut.bmp"><img src="avatars/astronaut.bmp" alt="astronaut"></div>
                     <div class="setup-avatar-item" data-src="avatars/ball.bmp"><img src="avatars/ball.bmp" alt="ball"></div>

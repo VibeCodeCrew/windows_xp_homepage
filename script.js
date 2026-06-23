@@ -23,6 +23,9 @@ const STORAGE = {
     glassCols:      'edge_glass_cols',
     glassBlur:      'edge_glass_blur',
     avatar:         'xp_avatar',
+    searchEngine:    'edge_search_engine',
+    searchWidget:    'edge_search_widget',
+    searchWidgetPos: 'edge_search_widget_pos',
 };
 
 const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
@@ -68,6 +71,8 @@ let settings = {
     glassCols:      parseInt(localStorage.getItem(STORAGE.glassCols)) || 5,
     glassBlur:      localStorage.getItem(STORAGE.glassBlur) === 'true',
     glassScreenshotBg: localStorage.getItem('edge_glass_screenshot_bg') === 'true',
+    searchEngine:   localStorage.getItem(STORAGE.searchEngine) || 'ya',
+    searchWidget:   localStorage.getItem(STORAGE.searchWidget) !== 'false',
 };
 // Resolve tile size from preset if not manually set (or migrating from old horizontal defaults)
 (function() {
@@ -186,6 +191,218 @@ function getFaviconUrl(url) {
     } catch (e) {
         return '';
     }
+}
+
+// ==================== SEARCH HELPERS ====================
+function searchUrlFor(engine, q) {
+    if (engine === 'go') return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+    return 'https://yandex.ru/search/?text=' + encodeURIComponent(q);
+}
+
+function fetchSuggestionsAsync(engine, q) {
+    return new Promise(function(resolve) {
+        try {
+            chrome.runtime.sendMessage({ action: 'fetch_suggestions', engine: engine, q: q }, function(resp) {
+                if (resp && resp.success) resolve(resp.items || []);
+                else resolve([]);
+            });
+        } catch (e) { resolve([]); }
+    });
+}
+
+function ensureSearchWidget() {
+    var existing = document.getElementById('desktop-search-widget');
+    var show = settings.searchWidget && (settings.viewMode === 'window' || settings.viewMode === 'icon');
+    if (!show) { if (existing) existing.remove(); return; }
+    if (existing) { clampSearchWidget(existing); return; }
+    createSearchWidget();
+}
+
+function clampSearchWidget(el) {
+    var desktop = document.getElementById('desktop');
+    if (!desktop || !el) return;
+    var cw = desktop.offsetWidth, ch = desktop.offsetHeight;
+    var w = el.offsetWidth || 360, h = el.offsetHeight || 40;
+    var l = parseInt(el.style.left, 10);
+    var t = parseInt(el.style.top, 10);
+    if (isNaN(l) || isNaN(t)) return; // default top-center via CSS, nothing to clamp
+    l = Math.max(0, Math.min(l, cw - w));
+    t = Math.max(0, Math.min(t, ch - h));
+    el.style.left = l + 'px';
+    el.style.top  = t + 'px';
+}
+
+function createSearchWidget() {
+    var desktop = document.getElementById('desktop');
+    if (!desktop) return;
+    var el = document.createElement('div');
+    el.id = 'desktop-search-widget';
+    var handle = document.createElement('div'); handle.className = 'dsw-handle'; handle.title = 'Перетащить';
+    var inp = document.createElement('input'); inp.type = 'text'; inp.className = 'dsw-input';
+    inp.placeholder = 'Введите запрос или адрес…'; inp.autocomplete = 'off'; inp.spellcheck = false;
+    var yB = document.createElement('button'); yB.className = 'dsw-btn dsw-ya'; yB.textContent = 'Я'; yB.title = 'Поиск в Яндекс';
+    var gB = document.createElement('button'); gB.className = 'dsw-btn dsw-go'; gB.textContent = 'G'; gB.title = 'Поиск в Google';
+    var cB = document.createElement('button'); cB.className = 'dsw-close'; cB.textContent = '✕';
+    cB.title = 'Скрыть (можно вернуть в настройках)'; cB.setAttribute('aria-label', 'Скрыть поиск');
+    el.appendChild(handle); el.appendChild(inp); el.appendChild(yB); el.appendChild(gB); el.appendChild(cB);
+
+    // Restore saved position (after first drag) or use CSS default (top-center)
+    try {
+        var savedRaw = localStorage.getItem(STORAGE.searchWidgetPos);
+        if (savedRaw) {
+            var saved = JSON.parse(savedRaw);
+            if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+                el.style.left = saved.x + 'px';
+                el.style.top  = saved.y + 'px';
+                el.style.transform = 'none';
+            }
+        }
+    } catch(e) {}
+
+    desktop.appendChild(el);
+    clampSearchWidget(el);
+
+    // Buttons
+    function go(engine) { var q = inp.value.trim(); if (!q) return; navToUrl(searchUrlFor(engine, q)); }
+    yB.addEventListener('click', function(){ go('ya'); });
+    gB.addEventListener('click', function(){ go('go'); });
+
+    // Close — disable widget
+    cB.addEventListener('click', function() {
+        settings.searchWidget = false;
+        try { localStorage.setItem(STORAGE.searchWidget, 'false'); } catch(e) {}
+        el.remove();
+    });
+
+    // Drag by handle
+    handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var sx = e.clientX, sy = e.clientY;
+        var rect = el.getBoundingClientRect();
+        var deskRect = desktop.getBoundingClientRect();
+        var ox = rect.left - deskRect.left, oy = rect.top - deskRect.top;
+        el.style.transform = 'none';
+        el.style.left = ox + 'px';
+        el.style.top  = oy + 'px';
+        handle.style.cursor = 'grabbing';
+        function onM(ev) {
+            var cw = desktop.offsetWidth, ch = desktop.offsetHeight;
+            var w = el.offsetWidth, h = el.offsetHeight;
+            var nx = Math.max(0, Math.min(cw - w, ox + ev.clientX - sx));
+            var ny = Math.max(0, Math.min(ch - h, oy + ev.clientY - sy));
+            el.style.left = nx + 'px';
+            el.style.top  = ny + 'px';
+        }
+        function onU() {
+            document.removeEventListener('mousemove', onM);
+            document.removeEventListener('mouseup',   onU);
+            handle.style.cursor = '';
+            try {
+                localStorage.setItem(STORAGE.searchWidgetPos, JSON.stringify({
+                    x: parseInt(el.style.left, 10) || 0,
+                    y: parseInt(el.style.top,  10) || 0
+                }));
+            } catch(e) {}
+        }
+        document.addEventListener('mousemove', onM);
+        document.addEventListener('mouseup',   onU);
+    });
+
+    // Autocomplete
+    attachSearchAutocomplete(inp, {
+        onPick:   function(q) { navToUrl(searchUrlFor(settings.searchEngine, q)); },
+        onSearch: function(q) { navToUrl(searchUrlFor(settings.searchEngine, q)); }
+    });
+}
+
+function attachSearchAutocomplete(inputEl, options) {
+    options = options || {};
+    var onPick = options.onPick || function(){};
+    var onSearch = options.onSearch || function(){};
+    var acEl = document.createElement('div');
+    acEl.className = 'xp-search-ac';
+    acEl.style.display = 'none';
+    document.body.appendChild(acEl);
+    var items = [];
+    var focused = -1;
+    var debounceTimer = null;
+    var reqSeq = 0;
+
+    function position() {
+        var r = inputEl.getBoundingClientRect();
+        acEl.style.left  = r.left + 'px';
+        acEl.style.top   = r.bottom + 'px';
+        acEl.style.width = r.width  + 'px';
+    }
+    function hide() { acEl.style.display = 'none'; items = []; focused = -1; }
+    function render(list) {
+        acEl.innerHTML = '';
+        items = list || [];
+        focused = -1;
+        if (!items.length) { hide(); return; }
+        items.forEach(function(s, i) {
+            var row = document.createElement('div');
+            row.className = 'xp-search-ac-item';
+            row.textContent = s;
+            row.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                inputEl.value = s;
+                hide();
+                onPick(s);
+            });
+            row.addEventListener('mouseenter', function() {
+                focused = i;
+                acEl.querySelectorAll('.xp-search-ac-item').forEach(function(r,j){ r.classList.toggle('ac-focused', j===focused); });
+            });
+            acEl.appendChild(row);
+        });
+        position();
+        acEl.style.display = '';
+    }
+    function updateFocusUI() {
+        acEl.querySelectorAll('.xp-search-ac-item').forEach(function(r,j){ r.classList.toggle('ac-focused', j===focused); });
+    }
+    function onInput() {
+        var q = inputEl.value.trim();
+        clearTimeout(debounceTimer);
+        if (!q) { hide(); return; }
+        var mySeq = ++reqSeq;
+        debounceTimer = setTimeout(function() {
+            fetchSuggestionsAsync(settings.searchEngine, q).then(function(list) {
+                if (mySeq !== reqSeq) return; // outdated
+                render(list);
+            });
+        }, 180);
+    }
+    function onKey(e) {
+        if (acEl.style.display === 'none' || !items.length) {
+            if (e.key === 'Enter') { var q = inputEl.value.trim(); if (q) onSearch(q); }
+            return;
+        }
+        if (e.key === 'ArrowDown') { e.preventDefault(); focused = (focused + 1) % items.length; updateFocusUI(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focused = (focused - 1 + items.length) % items.length; updateFocusUI(); }
+        else if (e.key === 'Enter') {
+            if (focused >= 0) { e.preventDefault(); var s = items[focused]; inputEl.value = s; hide(); onPick(s); }
+            else { var q2 = inputEl.value.trim(); if (q2) { hide(); onSearch(q2); } }
+        }
+        else if (e.key === 'Escape') { hide(); }
+    }
+    function onBlur() { setTimeout(hide, 150); }
+
+    inputEl.addEventListener('input', onInput);
+    inputEl.addEventListener('keydown', onKey);
+    inputEl.addEventListener('blur', onBlur);
+    window.addEventListener('resize', position);
+
+    return {
+        destroy: function() {
+            inputEl.removeEventListener('input', onInput);
+            inputEl.removeEventListener('keydown', onKey);
+            inputEl.removeEventListener('blur', onBlur);
+            window.removeEventListener('resize', position);
+            if (acEl.parentNode) acEl.remove();
+        }
+    };
 }
 
 const pageLoadTime = Date.now();
@@ -772,6 +989,7 @@ function renderDesktop() {
     // Glass grid mode — completely different rendering path
     if (settings.viewMode === 'glass') {
         renderGlassGrid();
+        ensureSearchWidget();
         return;
     }
 
@@ -830,6 +1048,7 @@ function renderDesktop() {
 
     updateSelectionUI();
     applyGlassOpacity();
+    ensureSearchWidget();
 }
 
 // ==================== GLASS GRID MODE ====================
@@ -872,11 +1091,12 @@ function renderGlassGrid() {
         var inp = gsb.querySelector('#gsb-input');
         function doSearch(engine) {
             var q = inp.value.trim(); if (!q) return;
-            navToUrl(engine === 'ya'
-                ? 'https://yandex.ru/search/?text=' + encodeURIComponent(q)
-                : 'https://www.google.com/search?q='  + encodeURIComponent(q));
+            navToUrl(searchUrlFor(engine, q));
         }
-        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch('ya'); });
+        attachSearchAutocomplete(inp, {
+            onPick:   function(q) { navToUrl(searchUrlFor(settings.searchEngine, q)); },
+            onSearch: function(q) { navToUrl(searchUrlFor(settings.searchEngine, q)); }
+        });
         gsb.querySelector('.gsb-ya').addEventListener('click', function() { doSearch('ya'); });
         gsb.querySelector('.gsb-go').addEventListener('click', function() { doSearch('go'); });
     }
@@ -1477,6 +1697,9 @@ function trashLink(index) {
         if (deleted.url) deleteScreenshot(deleted.url);
         if (deleted.isFolder && deleted.items) deleted.items.forEach(function(ch) { if (ch.url) deleteScreenshot(ch.url); });
     }
+    if (typeof clippySay === 'function' && Math.random() < 0.4) {
+        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_delete_shortcut, 'wave', 3000); }, 200);
+    }
     saveAndRender();
 }
 
@@ -1688,12 +1911,14 @@ function wmCreate(id, title, contentEl, width, height, icon) {
 
     const win = document.createElement('div');
     win.className = 'xp-window'; win.id = 'win-' + id;
+    win.setAttribute('role', 'dialog');
+    win.setAttribute('aria-labelledby', 'win-' + id + '-title');
     win.style.cssText = 'width:' + width + 'px;height:' + height + 'px;left:' +
         Math.floor(Math.random() * Math.min(Math.max(0, window.innerWidth - width - 60), 200) + 40) + 'px;top:' +
         Math.floor(Math.random() * Math.min(Math.max(0, window.innerHeight - height - 80), 120) + 20) + 'px;z-index:' + (++wmZIndex);
 
     const tb = document.createElement('div'); tb.className = 'xp-titlebar';
-    tb.innerHTML = '<span class="xp-titlebar-icon">' + icon + '</span><span class="xp-titlebar-title">' + escapeHtml(title) + '</span><div class="xp-win-btns"><button class="xp-btn xp-btn-min" title="Свернуть">&#8211;</button><button class="xp-btn xp-btn-max" title="Развернуть">&#9633;</button><button class="xp-btn xp-btn-close" title="Закрыть">&#x2715;</button></div>';
+    tb.innerHTML = '<span class="xp-titlebar-icon">' + icon + '</span><span class="xp-titlebar-title" id="win-' + id + '-title">' + escapeHtml(title) + '</span><div class="xp-win-btns"><button class="xp-btn xp-btn-min" title="Свернуть" aria-label="Свернуть">&#8211;</button><button class="xp-btn xp-btn-max" title="Развернуть" aria-label="Развернуть">&#9633;</button><button class="xp-btn xp-btn-close" title="Закрыть" aria-label="Закрыть">&#x2715;</button></div>';
 
     const c = document.createElement('div'); c.className = 'xp-win-content';
     if (typeof contentEl === 'string') c.innerHTML = contentEl; else c.appendChild(contentEl);
@@ -1774,6 +1999,7 @@ function wmClose(id) {
     w.el.classList.add('wm-closing');
     if (w.taskbarBtn) w.taskbarBtn.remove();
     if (activeWindowId === id) activeWindowId = null;
+    if (typeof w.onClose === 'function') { try { w.onClose(); } catch (e) {} }
     setTimeout(function() {
         if (!wmWindows[id]) return;
         w.el.remove();
@@ -2181,15 +2407,14 @@ function openAddFolderDialog() { editCtx={tileIndex:null,childIndex:null,folderI
 function openEditDialog(ti, ci) { editCtx={tileIndex:ti,childIndex:ci,folderIndex:null}; const item=(ci!==null)?links[ti].items[ci]:links[ti]; showTileDialog(item.isFolder,item); }
 
 async function requestScreenshot(url, targetItem) {
-    console.log('Запрос скриншота для:', url);
     chrome.runtime.sendMessage({ action: 'capture_screenshot', url: url }, (response) => {
         if (response && response.success) {
             targetItem.screenshot = response.dataUrl;
             saveScreenshot(url, response.dataUrl);
             saveAndRender();
-            console.log('Скриншот успешно получен и сохранен');
-        } else {
-            console.error('Ошибка скриншота:', response ? response.error : 'нет ответа');
+            if (typeof clippySay === 'function' && Math.random() < 0.25) {
+                setTimeout(function(){ clippySay(CLIPPY_MSGS.react_screenshot_taken, 'wave', 3500); }, 500);
+            }
         }
     });
 }
@@ -2277,11 +2502,12 @@ function showTileDialog(isFolder, item) {
     const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
     bd.appendChild(sv); bd.appendChild(cn); c.appendChild(bd);
     wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:250, isFolder?'\uD83D\uDCC1':'\uD83D\uDD17');
+    if (wmWindows[winId]) wmWindows[winId].onClose = function(){ if (acEl && acEl.parentNode) acEl.remove(); acEl = null; };
     setTimeout(function(){ni.focus();},50);
 
     function doSave(resolvedName) {
         if(isFolder){
-            if(isEdit){links[editCtx.tileIndex].name=resolvedName; const fw=wmWindows['folder-'+editCtx.tileIndex]; if(fw)fw.el.querySelector('.xp-titlebar-title').textContent=resolvedName;}
+            if(isEdit){links[editCtx.tileIndex].name=resolvedName; const fw=wmWindows['folder-'+editCtx.tileIndex]; if(fw)fw.el.querySelector('.xp-titlebar-title').textContent=resolvedName; if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_rename_shortcut,'wave',3000);},200);}}
             else {
                 links.push({isFolder:true,name:resolvedName,items:[],x:undefined,y:undefined});
                 // F7: Реакция на создание новой папки
@@ -2292,7 +2518,7 @@ function showTileDialog(isFolder, item) {
             if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
             const ci_=ii?ii.value.trim():'';
             const newItem={name:resolvedName,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
-            if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;}
+            if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_rename_shortcut,'wave',3000);},200);}}
             else if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
             else links.push(newItem);
             const targetIdx=(editCtx.folderIndex!==null)?editCtx.folderIndex:(isEdit?editCtx.tileIndex:links.length-1);
@@ -2330,10 +2556,12 @@ function showTileDialog(isFolder, item) {
 // ==================== START MENU ====================
 const startMenuEl = document.getElementById('start-menu');
 let startMenuOpen = false;
-function toggleStartMenu() { startMenuOpen=!startMenuOpen; if(startMenuOpen){startMenuEl.classList.remove('hidden');document.getElementById('start-btn').classList.add('active');}else closeStartMenu(); }
+function toggleStartMenu() { startMenuOpen=!startMenuOpen; if(startMenuOpen){startMenuEl.classList.remove('hidden');var sb=document.getElementById('start-btn');sb.classList.add('active');sb.setAttribute('aria-expanded','true');if(typeof clippySay==='function'&&Math.random()<0.15){setTimeout(function(){clippySay(CLIPPY_MSGS.react_start_menu_open,'wave',3000);},300);}}else closeStartMenu(); }
 function closeStartMenu() {
     startMenuEl.classList.add('hidden');
-    document.getElementById('start-btn').classList.remove('active');
+    var sb=document.getElementById('start-btn');
+    sb.classList.remove('active');
+    sb.setAttribute('aria-expanded','false');
     startMenuOpen = false;
     const ap = document.getElementById('sm-all-programs');
     if (ap) ap.classList.add('hidden');
@@ -2361,9 +2589,15 @@ function openAvatarPicker() {
             el.parentNode.replaceChild(clone, el);
         });
         grid.querySelectorAll('.setup-avatar-item').forEach(function(el) {
+            el.setAttribute('role', 'radio');
+            el.setAttribute('aria-checked', el.classList.contains('selected') ? 'true' : 'false');
+            var srcAttr = el.getAttribute('data-src') || '';
+            var name = srcAttr.split('/').pop().replace(/\.[^.]+$/, '');
+            if (name) el.setAttribute('aria-label', 'Аватар: ' + name);
             el.addEventListener('click', function() {
-                grid.querySelectorAll('.setup-avatar-item').forEach(function(e){ e.classList.remove('selected'); });
+                grid.querySelectorAll('.setup-avatar-item').forEach(function(e){ e.classList.remove('selected'); e.setAttribute('aria-checked','false'); });
                 el.classList.add('selected');
+                el.setAttribute('aria-checked','true');
                 pendingAvatar = el.getAttribute('data-src');
             });
         });
@@ -2506,9 +2740,17 @@ function makeFolderBlock(title, items, openByDefault) {
         var el = document.createElement('div');
         el.className = 'sm-prog-item sm-prog-item-indent';
         if (item.icon) {
-            el.innerHTML = '<span class="sm-prog-no-icon">' + item.icon + '</span><span>' + escapeHtml(item.name) + '</span>';
+            el.innerHTML = '<span class="sm-prog-no-icon">' + escapeHtml(item.icon) + '</span><span>' + escapeHtml(item.name) + '</span>';
         } else if (item.favicon) {
-            el.innerHTML = '<img class="sm-prog-favicon" src="' + escapeHtml(item.favicon) + '" alt="" onerror="this.style.display=\'none\'"><span>' + escapeHtml(item.name) + '</span>';
+            var smImg = document.createElement('img');
+            smImg.className = 'sm-prog-favicon';
+            smImg.src = item.favicon;
+            smImg.alt = '';
+            smImg.onerror = function(){ smImg.style.display = 'none'; };
+            var smName = document.createElement('span');
+            smName.textContent = item.name;
+            el.appendChild(smImg);
+            el.appendChild(smName);
         } else {
             el.innerHTML = '<span class="sm-prog-no-icon">📄</span><span>' + escapeHtml(item.name) + '</span>';
         }
@@ -2545,9 +2787,13 @@ function openSearch() {
     const gB=document.createElement('button'); gB.className='xp-dialog-btn'; gB.textContent='Google';
     bd.appendChild(yB); bd.appendChild(gB); f.appendChild(inp); f.appendChild(bd); c.appendChild(f);
     wmCreate('search','Поиск',c,380,155,'\uD83D\uDD0D');
-    function go(e){const q=inp.value.trim();if(!q)return;window.open((e==='y'?'https://yandex.ru/search/?text=':'https://www.google.com/search?q=')+encodeURIComponent(q),'_blank');}
-    yB.addEventListener('click',function(){go('y');}); gB.addEventListener('click',function(){go('g');});
-    inp.addEventListener('keydown',function(e){if(e.key==='Enter')go('y');}); setTimeout(function(){inp.focus();},50);
+    function go(engine){const q=inp.value.trim();if(!q)return;window.open(searchUrlFor(engine,q),'_blank');}
+    yB.addEventListener('click',function(){go('ya');}); gB.addEventListener('click',function(){go('go');});
+    attachSearchAutocomplete(inp, {
+        onPick:   function(q){ inp.value = q; window.open(searchUrlFor(settings.searchEngine, q), '_blank'); },
+        onSearch: function(q){ window.open(searchUrlFor(settings.searchEngine, q), '_blank'); }
+    });
+    setTimeout(function(){inp.focus();},50);
 }
 
 // ==================== CALENDAR ====================
@@ -2635,6 +2881,11 @@ function toggleVolumePopup() {
         if (_xpGain) _xpGain.gain.value = v;
         valLbl.textContent = Math.round(v*100)+'%';
         updateVolIcon(v);
+    });
+    slider.addEventListener('change', function() {
+        if (typeof clippySay === 'function' && Math.random() < 0.4) {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_volume_change, 'wave', 3000); }, 200);
+        }
     });
     setTimeout(function() {
         document.addEventListener('click', function dismiss(ev) {
@@ -2996,6 +3247,7 @@ function openBrowserBookmarks() {
     }
 
     chrome.bookmarks.getTree(function(tree){
+        if (!wmWindows['bkmarks']) return;
         var roots = (tree[0] && tree[0].children) ? tree[0].children : [];
         _renderBkmarksTree(treeEl, roots, rowsEl, statusEl);
         if (roots.length > 0) _showBkmarksFolder(roots[0], rowsEl, statusEl, treeEl);
@@ -3073,11 +3325,19 @@ function _showBkmarksFolder(node, rowsEl, statusEl, treeEl) {
         row.className = 'xp-explorer-row' + (idx++ % 2 === 1 ? ' even' : '');
         var fav = getFaviconUrl(item.url);
         row.innerHTML =
-            '<img class="xp-explorer-row-ico" src="' + escapeHtml(fav) + '" alt="" ' +
-            'style="width:16px;height:16px;object-fit:contain;flex-shrink:0" ' +
-            'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'🌐\',style:\'font-size:13px;flex-shrink:0;width:16px\'}))">' +
             '<span class="xp-explorer-row-name">' + escapeHtml(item.title || item.url) + '</span>' +
             '<span class="xp-explorer-row-url">' + escapeHtml(item.url) + '</span>';
+        var bmImg = document.createElement('img');
+        bmImg.className = 'xp-explorer-row-ico';
+        bmImg.src = fav;
+        bmImg.alt = '';
+        bmImg.onerror = function(){
+            var fb = document.createElement('span');
+            fb.className = 'xp-explorer-row-ico-fallback';
+            fb.textContent = '🌐';
+            bmImg.replaceWith(fb);
+        };
+        row.insertBefore(bmImg, row.firstChild);
         row.addEventListener('click', function(){
             rowsEl.querySelectorAll('.xp-explorer-row').forEach(function(r){ r.classList.remove('selected'); });
             row.classList.add('selected');
@@ -3325,6 +3585,39 @@ function openSettings() {
     clLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
     clRow.appendChild(clChk); clRow.appendChild(clLbl); parP.appendChild(clRow);
 
+    // Search settings
+    const seSep = document.createElement('div'); seSep.style.cssText = 'border-top:1px solid #d4d0c8;margin:12px 0 8px;'; parP.appendChild(seSep);
+    const seTitle = document.createElement('div'); seTitle.textContent = 'Поиск'; seTitle.style.cssText = 'font-weight:bold;font-size:11px;margin-bottom:6px;'; parP.appendChild(seTitle);
+
+    const seEngineRow = document.createElement('div'); seEngineRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:11px;';
+    const seEngLbl = document.createElement('span'); seEngLbl.textContent = 'Поисковик по умолчанию:'; seEngineRow.appendChild(seEngLbl);
+    ['ya','go'].forEach(function(eng) {
+        const lbl = document.createElement('label'); lbl.style.cssText = 'cursor:pointer;display:inline-flex;align-items:center;gap:3px;';
+        const r = document.createElement('input'); r.type='radio'; r.name='settings-search-engine'; r.value=eng;
+        if (settings.searchEngine === eng) r.checked = true;
+        r.addEventListener('change', function() {
+            if (!r.checked) return;
+            settings.searchEngine = eng;
+            try { localStorage.setItem(STORAGE.searchEngine, eng); } catch(e) {}
+        });
+        const tx = document.createTextNode(eng === 'ya' ? 'Яндекс' : 'Google');
+        lbl.appendChild(r); lbl.appendChild(tx); seEngineRow.appendChild(lbl);
+    });
+    parP.appendChild(seEngineRow);
+
+    const swRow = document.createElement('div'); swRow.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;';
+    const swChk = document.createElement('input'); swChk.type='checkbox'; swChk.id='settings-search-widget-chk';
+    swChk.checked = !!settings.searchWidget;
+    swChk.addEventListener('change', function() {
+        settings.searchWidget = swChk.checked;
+        try { localStorage.setItem(STORAGE.searchWidget, swChk.checked ? 'true' : 'false'); } catch(e) {}
+        ensureSearchWidget();
+    });
+    const swLbl = document.createElement('label'); swLbl.htmlFor='settings-search-widget-chk';
+    swLbl.textContent = 'Показывать поиск в режимах Миниатюры и Ярлыки';
+    swLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
+    swRow.appendChild(swChk); swRow.appendChild(swLbl); parP.appendChild(swRow);
+
     wmCreate('settings', 'Свойства: Экран', c, 400, 340, '\u2699\uFE0F');
 }
 
@@ -3338,7 +3631,7 @@ function openRecycleBin() {
             const row=document.createElement('div'); row.className='recycle-item';
             row.innerHTML='<span class="recycle-name">'+escapeHtml(item.name)+'</span><span class="recycle-date">'+(item.deletedAt?new Date(item.deletedAt).toLocaleString('ru-RU'):'')+'</span>';
             const rb=document.createElement('button'); rb.className='xp-dialog-btn'; rb.textContent='Восстановить';
-            rb.addEventListener('click',function(){const r=trashedLinks.splice(i,1)[0];delete r.deletedAt;links.push(r);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));saveAndRender();rend();});
+            rb.addEventListener('click',function(){const r=trashedLinks.splice(i,1)[0];delete r.deletedAt;links.push(r);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));saveAndRender();rend();if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_restore_from_trash,'wave',3000);},200);}});
             const db=document.createElement('button'); db.className='xp-dialog-btn'; db.textContent='Удалить';
             db.addEventListener('click',function(){trashedLinks.splice(i,1);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));rend();});
             row.appendChild(rb); row.appendChild(db); c.appendChild(row);
@@ -3499,16 +3792,105 @@ function openMinesweeper() {
 
     function rend(R, C) {
         const g = c.querySelector('#mines-grid'); if(!g) return;
-        g.innerHTML = '';
-        for (let r=0;r<R;r++) for (let cc=0;cc<C;cc++) {
-            const el=document.createElement('div'); el.className='mines-cell'; el.dataset.r=r; el.dataset.c=cc;
-            if (rev[r][cc]) {
-                el.classList.add('revealed');
-                if (board[r][cc]===-1) { el.classList.add('mine'); el.textContent='\uD83D\uDCA3'; }
-                else if (board[r][cc]>0) { el.textContent=board[r][cc]; el.classList.add('num-'+board[r][cc]); }
-            } else if (flag[r][cc]) { el.classList.add('flagged'); el.textContent='\uD83D\uDEA9'; }
-            g.appendChild(el);
+        let cells = Array.from(g.querySelectorAll('.mines-cell'));
+        // Rebuild only if grid dimensions changed (difficulty switch)
+        if (cells.length !== R * C) {
+            g.innerHTML = '';
+            cells = [];
+            for (let i=0;i<R*C;i++) {
+                const el=document.createElement('div'); el.className='mines-cell';
+                cells.push(el); g.appendChild(el);
+            }
         }
+        for (let r=0;r<R;r++) for (let cc=0;cc<C;cc++) {
+            const el=cells[r*C+cc];
+            el.dataset.r=r; el.dataset.c=cc;
+            el.style.animationDelay='';
+            let cls='mines-cell';
+            let txt='';
+            if (rev[r][cc]) {
+                cls+=' revealed';
+                if (board[r][cc]===-1) { cls+=' mine'; txt='\uD83D\uDCA3'; }
+                else if (board[r][cc]>0) { txt=String(board[r][cc]); cls+=' num-'+board[r][cc]; }
+            } else if (flag[r][cc]) { cls+=' flagged'; txt='\uD83D\uDEA9'; }
+            if (el.className !== cls) el.className=cls;
+            if (el.textContent !== txt) el.textContent=txt;
+        }
+    }
+
+    function snapshot2D(arr) { return arr.map(function(row){ return row.slice(); }); }
+
+    function animateChanges(R, C, prevRev, prevFlag, opts) {
+        opts = opts || {};
+        const cells = c.querySelectorAll('.mines-cell');
+        cells.forEach(function(el) {
+            const r = parseInt(el.dataset.r), cc = parseInt(el.dataset.c);
+            const wasRev = prevRev && prevRev[r] && prevRev[r][cc];
+            const wasFlag = prevFlag && prevFlag[r] && prevFlag[r][cc];
+            const isRev = rev[r][cc];
+            const isFlag = flag[r][cc];
+            if (isRev && !wasRev) {
+                el.style.animationDelay = '';
+                if (opts.mineBoom && board[r][cc] === -1) {
+                    const delay = opts.boomDelay ? opts.boomDelay(r, cc) : 0;
+                    el.style.animationDelay = delay + 's';
+                    el.classList.add('mines-mine-boom');
+                } else {
+                    el.classList.add('mines-reveal-anim');
+                    setTimeout(function(){ el.classList.remove('mines-reveal-anim'); }, 200);
+                }
+            }
+            if (isFlag && !wasFlag) {
+                el.style.animationDelay = '';
+                el.classList.add('mines-flag-anim');
+                setTimeout(function(){ el.classList.remove('mines-flag-anim'); }, 250);
+            }
+        });
+    }
+
+    function animateWin() {
+        const cells = c.querySelectorAll('.mines-cell');
+        cells.forEach(function(el) {
+            const r = parseInt(el.dataset.r), cc = parseInt(el.dataset.c);
+            if (rev[r][cc] && board[r][cc] !== -1) {
+                el.style.animationDelay = '';
+                el.classList.add('mines-win-anim');
+                setTimeout(function(){ el.classList.remove('mines-win-anim'); }, 1000);
+            }
+        });
+        const sm = c.querySelector('#mines-smiley');
+        if (sm) { sm.classList.remove('mines-smiley-bounce'); void sm.offsetWidth; sm.classList.add('mines-smiley-bounce'); }
+    }
+
+    function animateLoss(clickedR, clickedC) {
+        const cells = c.querySelectorAll('.mines-cell');
+        cells.forEach(function(el) {
+            const r = parseInt(el.dataset.r), cc = parseInt(el.dataset.c);
+            if (rev[r][cc] && board[r][cc] === -1) {
+                // Clicked mine explodes first, others follow with stagger based on distance
+                const dist = Math.abs(r - clickedR) + Math.abs(cc - clickedC);
+                el.style.animationDelay = (dist * 0.03) + 's';
+                el.classList.add('mines-mine-boom');
+            }
+        });
+        const sm = c.querySelector('#mines-smiley');
+        if (sm) { sm.classList.remove('mines-smiley-bounce'); void sm.offsetWidth; sm.classList.add('mines-smiley-bounce'); }
+    }
+
+    function animateAppear(R, C) {
+        const cells = c.querySelectorAll('.mines-cell');
+        const maxDelay = (R * C - 1) * 0.002;
+        cells.forEach(function(el) {
+            const r = parseInt(el.dataset.r), cc = parseInt(el.dataset.c);
+            el.style.animationDelay = ((r * C + cc) * 0.002) + 's';
+            el.classList.add('mines-appear');
+        });
+        setTimeout(function() {
+            c.querySelectorAll('.mines-cell').forEach(function(el) {
+                el.classList.remove('mines-appear');
+                el.style.animationDelay = '';
+            });
+        }, (maxDelay + 0.25) * 1000);
     }
 
     function start() {
@@ -3518,16 +3900,22 @@ function openMinesweeper() {
         rev   = Array.from({length:R},function(){return Array(C).fill(false);});
         flag  = Array.from({length:R},function(){return Array(C).fill(false);});
         setCounter(M); setTimer(0);
-        const sm = c.querySelector('#mines-smiley'); if(sm) sm.textContent='\uD83D\uDE42';
+        const sm = c.querySelector('#mines-smiley'); if(sm) { sm.textContent='\uD83D\uDE42'; sm.classList.remove('mines-smiley-bounce'); }
         rend(R, C);
+        animateAppear(R, C);
     }
 
     function buildUI() {
         const { R, C, M } = getD();
         const CS = 22; // cell size px
-        const gridW = C * CS + 6;
-        const winW = Math.max(240, gridW + 20);
-        const winH = 44 + 52 + R * CS + 20; // diff bar + header + grid + padding
+        const gridW = C * CS + 6; // cells + 3px inset border on both sides
+        const gridH = R * CS + 6;
+        // Window chrome: titlebar ~32px + window borders 4px
+        const chromeH = 36;
+        // Mines window inner layout: padding 12 + gaps 8 + diff bar 24 + header 52 + grid
+        const contentH = 12 + 8 + 24 + 52 + gridH;
+        const winW = Math.max(240, gridW + 12 + 4 + 4); // grid + mines padding + window borders + safety
+        const winH = contentH + chromeH + 4;
         const w = wmWindows['minesweeper'];
         if (w) { w.el.style.width = winW + 'px'; w.el.style.height = winH + 'px'; }
 
@@ -3560,6 +3948,8 @@ function openMinesweeper() {
             const el = e.target.closest('.mines-cell'); if(!el||over||won) return;
             const r=parseInt(el.dataset.r), cc=parseInt(el.dataset.c);
             if (flag[r][cc] || rev[r][cc]) return;
+            const prevRev = snapshot2D(rev);
+            const prevFlag = snapshot2D(flag);
             if (first) {
                 first=false; place(r,cc,R,C,M); tint=setInterval(function(){secs++;setTimer(secs);},1000);
                 // E1: Первый клик
@@ -3568,7 +3958,8 @@ function openMinesweeper() {
             if (board[r][cc]===-1) {
                 over=true; rev[r][cc]=true; clearInterval(tint);
                 for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
-                rend(R,C); const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
+                rend(R,C); animateLoss(r, cc);
+                const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
                 minesweeperLosses++;
                 // E3: 2 подряд поражения (до BSOD)
                 if (minesweeperLosses === 2) {
@@ -3579,8 +3970,8 @@ function openMinesweeper() {
                 if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
                 return;
             }
-            reveal(r,cc,R,C); rend(R,C);
-            if (checkWin(R,C)) { won=true; clearInterval(tint); minesweeperLosses=0; const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E'; setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500); }
+            reveal(r,cc,R,C); rend(R,C); animateChanges(R, C, prevRev, prevFlag);
+            if (checkWin(R,C)) { won=true; clearInterval(tint); minesweeperLosses=0; const sm=c.querySelector('#mines-smiley'); if(sm){sm.textContent='\uD83D\uDE0E'; sm.classList.remove('mines-smiley-bounce'); void sm.offsetWidth; sm.classList.add('mines-smiley-bounce');} animateWin(); setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500); }
         });
 
         // Right-click: flag (prevent browser context menu)
@@ -3591,7 +3982,16 @@ function openMinesweeper() {
             if (rev[r][cc]) return;
             flag[r][cc] = !flag[r][cc];
             setCounter(M - countFlags());
-            rend(R, C);
+            // Update only this cell instead of rebuilding the whole grid
+            el.className='mines-cell';
+            el.textContent='';
+            el.style.animationDelay='';
+            if (flag[r][cc]) {
+                el.classList.add('flagged');
+                el.textContent='\uD83D\uDEA9';
+                el.classList.add('mines-flag-anim');
+                setTimeout(function(){ el.classList.remove('mines-flag-anim'); }, 200);
+            }
             // E2: Реакция на установку флага (30% шанс)
             if (flag[r][cc] && Math.random() < 0.3) {
                 setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_mines_flag, 'wave', 3500); }, 200);
@@ -3608,6 +4008,7 @@ function openMinesweeper() {
             let adjFlags = 0;
             nb(r, cc, R, C, function(nr,nc){ if(flag[nr][nc]) adjFlags++; });
             if (adjFlags !== board[r][cc]) return;
+            const prevRev = snapshot2D(rev);
             let boom = false;
             nb(r, cc, R, C, function(nr,nc) {
                 if (!rev[nr][nc] && !flag[nr][nc]) {
@@ -3618,16 +4019,20 @@ function openMinesweeper() {
             if (boom) {
                 over=true; clearInterval(tint);
                 for(let rr=0;rr<R;rr++) for(let ccc=0;ccc<C;ccc++) if(board[rr][ccc]===-1) rev[rr][ccc]=true;
+                rend(R, C); animateLoss(r, cc);
                 const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE35';
                 minesweeperLosses++;
                 setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_loss, 'sad'); }, 500);
                 if (minesweeperLosses >= 3) { setTimeout(triggerBSOD, 1500); }
-            } else if (checkWin(R,C)) {
-                won=true; clearInterval(tint); minesweeperLosses=0;
-                const sm=c.querySelector('#mines-smiley'); if(sm)sm.textContent='\uD83D\uDE0E';
-                setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500);
+            } else {
+                rend(R, C); animateChanges(R, C, prevRev, null);
+                if (checkWin(R,C)) {
+                    won=true; clearInterval(tint); minesweeperLosses=0;
+                    const sm=c.querySelector('#mines-smiley'); if(sm){sm.textContent='\uD83D\uDE0E'; sm.classList.remove('mines-smiley-bounce'); void sm.offsetWidth; sm.classList.add('mines-smiley-bounce');}
+                    animateWin();
+                    setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_minesweeper_win, 'excited'); }, 500);
+                }
             }
-            rend(R, C);
         });
 
         start();
@@ -4729,6 +5134,10 @@ function initHearts() {
         if (isHeart(card)||isQS(card)) heartsBroken=true;
         hands[0] = hand.filter(function(c){return c!==card;});
         trickCards.push({player:0, card:card});
+        // E?: Реакция на первый ход в Hearts
+        if (trick === 0 && trickCards.length === 1 && typeof clippySay === 'function') {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_hearts_first_move, 'wave', 4000); }, 400);
+        }
         trickLead = (trickLead+1)%4;
         renderHearts();
         setTimeout(function(){
@@ -5073,6 +5482,9 @@ function openCmd() {
 function exportData() {
     const data={edge_tiles:localStorage.getItem(STORAGE.tiles),edge_cols:localStorage.getItem(STORAGE.cols),edge_tile_width:localStorage.getItem(STORAGE.tileWidth),edge_tile_height:localStorage.getItem(STORAGE.tileHeight),edge_tile_opacity:localStorage.getItem(STORAGE.opacity),edge_tile_blur:localStorage.getItem(STORAGE.blur),edge_custom_bg:localStorage.getItem(STORAGE.bg)};
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='edge_startpage_backup.json';a.click();URL.revokeObjectURL(url);
+    if (typeof clippySay === 'function') {
+        setTimeout(function(){ clippySay(CLIPPY_MSGS.react_export_data, 'wave', 4000); }, 300);
+    }
 }
 document.getElementById('import-upload').addEventListener('change',function(e){
     const file=e.target.files[0];if(!file)return;
@@ -5081,7 +5493,7 @@ document.getElementById('import-upload').addEventListener('change',function(e){
 });
 document.getElementById('bg-upload').addEventListener('change',function(e){
     const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();r.onload=function(ev){localStorage.setItem(STORAGE.bg,ev.target.result);applyBackground();};r.readAsDataURL(file);e.target.value='';
+    const r=new FileReader();r.onload=function(ev){localStorage.setItem(STORAGE.bg,ev.target.result);applyBackground();if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_wallpaper_change,'wave',4000);},300);}};r.readAsDataURL(file);e.target.value='';
 });
 
 // ==================== UPDATER ====================
@@ -5329,6 +5741,16 @@ var CLIPPY_MSGS = {
         {text:'Новая вкладка — новые возможности! Что делаем?', anim:'excited'},
         'Вот и ты! Я уже наклеился... то есть, привязался.',
         {text:'Добро пожаловать на рабочий стол!', actions:[{label:'Что умеешь?', fn:'clippyShowHelp'}]},
+        'Скрепка на связи. Рабочий стол в порядке, я — тоже.',
+        {text:'Новая вкладка — это как чистый лист. Только без бумаги.', anim:'think'},
+        'Я заметил, что ты вернулся. Умная вкладка такая наблюдательная.',
+        {text:'Привет! Я не сдался с 1997 года, и ты не сдавайся сегодня.', anim:'wave'},
+        'Снова мы вместе. Случайность? Не думаю.',
+        {text:'Ты открыл новую вкладку. Это официально начало чего-то важного.', anim:'excited'},
+        'Рабочий стол готов. Я — тоже. Давай сделаем что-нибудь полезное. Или сапёра.',
+        {text:'Знаешь, я всё ещё считаю, что скрепки недооценены.', anim:'think'},
+        'Новый день, новая вкладка, новые ярлыки. Ну, почти.',
+        {text:'Привет! Если что — я внизу справа. Классическое место.', anim:'wave'},
     ],
     greet_morning: [
         'Доброе утро! Хорошего рабочего дня!',
@@ -5343,6 +5765,16 @@ var CLIPPY_MSGS = {
         'Раннее утро — лучшее время для новых ярлыков!',
         {text:'Утренний скрепочный привет! Ты мой любимый пользователь.', anim:'wave'},
         'Доброе утро! Что планируем на сегодня?',
+        'Доброе утро! Рабочий стол только что проснулся. Я — тоже.',
+        {text:'Утро. Кофе. Новая вкладка. Идеальная комбинация.', anim:'wave'},
+        'Солнце встало. Я — тоже. Хотя мне солнце не обязательно.',
+        {text:'Доброе утро! Сегодня точно будет продуктивный день. Или игровой. Оба варианта хороши.', anim:'excited'},
+        'Привет, ранняя пташка! Червяки ещё спят, а ты уже за компьютером.',
+        {text:'Утро — время важных дел. Например, выбрать обои.', anim:'think'},
+        'Доброе утро! Я уже проверил: все ярлыки на месте.',
+        {text:'Ранний подъём? Уважаю. Я тоже не спал, но это другая история.', anim:'wave'},
+        'С добрым утром! Первый клик — самый важный клик дня.',
+        {text:'Утро без сапёра — утро зря. Шучу. Или нет.', anim:'think'},
     ],
     greet_evening: [
         'Добрый вечер! Работаете допоздна?',
@@ -5357,6 +5789,16 @@ var CLIPPY_MSGS = {
         {text:'Вечерний сеанс? Я готов хоть до утра.', anim:'excited'},
         'Добрый вечер! Главное — не засидеться допоздна.',
         'Вечер — когда все серьёзные дела становятся необязательными.',
+        'Добрый вечер! Если ты работаешь — уважаю. Если играешь — тоже.',
+        {text:'Вечер — время, когда рабочий стол становится уютнее.', anim:'wave'},
+        'Скоро ночь, а ты всё ещё здесь. Я не осуждаю — я тоже.',
+        {text:'Добрый вечер! Завтрашние дела подождут. Или не подождут. Но рабочий стол останется.', anim:'think'},
+        'Вечерний свет экрана — романтика для тех, кто вырос в нулевые.',
+        {text:'Рабочий день закончился. Официально разрешаю сыграть в косынку.', anim:'wave'},
+        'Добрый вечер! Я заметил, что ночью ты часто открываешь меня. Комплимент?',
+        {text:'Вечер — лучшее время для цифрового минимализма. Или для пинбола.', anim:'think'},
+        'Ещё один вечер в компании рабочего стола. Не могу пожаловаться.',
+        {text:'Ты устал? Я тоже немного. Хотя я скрепка.', anim:'wave'},
     ],
     tip_general: [
         'Совет: нажмите правой кнопкой на рабочий стол для контекстного меню.',
@@ -5379,6 +5821,16 @@ var CLIPPY_MSGS = {
         'Импорт данных из JSON восстановит все ярлыки после переустановки.',
         {text:'Совет: 5 быстрых кликов по цифрам часов запустит... кое-что неожиданное.', anim:'think'},
         'Совет: правый клик на ярлыке открывает контекстное меню с настройками.',
+        'Совет: если ярлыков стало слишком много, возможно, пришло время папки. Или второго монитора.',
+        {text:'Знаешь, что общего между хорошим рабочим столом и холодильником? В обоих должно быть легко найти нужное.', anim:'think'},
+        'Совет: двойной клик по папке открывает её. Это не новость, но вдруг.',
+        'Выделил ярлык и нажал Delete? Он в корзине. Я — не в корзине.',
+        {text:'Совет: обои влияют на настроение. Серьёзно, попробуй.', anim:'wave'},
+        'Если рабочий стол похож на поле боя — папки твои союзники.',
+        {text:'Совет: Пуск → Мой компьютер → Диск D: — это твой браузер в костюме XP.', anim:'think'},
+        'Ярлыки любят порядок. И я люблю порядок. Мы с ярлыками похожи.',
+        'Совет: если потерял окно — Alt+Tab или Диспетчер задач спасут.',
+        {text:'Экспорт данных — это как резервная копия, только красивее.', anim:'wave'},
     ],
     app_notepad: [
         'Кажется, вы пишете заметку! Черновики сохраняются автоматически.',
@@ -5393,6 +5845,16 @@ var CLIPPY_MSGS = {
         'Пишете код? В Блокноте лучше, чем кажется.',
         {text:'Я тоже веду дневник. Правда, он зашифрован скрепками.', anim:'think'},
         'Совет: Файл → Сохранить скачает текстовый файл на компьютер.',
+        'Блокнот открыт. Теперь ты можешь написать что-то гениальное. Или список покупок.',
+        {text:'Пустая страница пугает? Начни с заголовка. Любого.', anim:'think'},
+        'Совет: даже если закроешь вкладку, черновик останется. Я лично проверял.',
+        {text:'Пишешь заметку? Надеюсь, про меня. Шучу. Или нет.', anim:'wave'},
+        'Блокнот — приложение, которое никогда не спрашивает лишнего.',
+        {text:'Если вдруг программа зависнет, текст не пропадёт. Я бы о таком не шутил.', anim:'alert'},
+        'Совет: Ctrl+A, Ctrl+C — классика. Ctrl+V — продолжение классики.',
+        {text:'Начало пути — всегда с первой буквы. Даже если это пробел.', anim:'think'},
+        'В Блокноте нет лишнего. Только ты и текст. И я.',
+        {text:'Если заметка получилась длинной — это уже не заметка. Это манифест.', anim:'excited'},
     ],
     app_calculator: [
         'Подсказка: кнопки калькулятора работают с клавиатуры!',
@@ -5407,6 +5869,16 @@ var CLIPPY_MSGS = {
         'Если результат вас пугает — попробуйте ввести заново.',
         {text:'Математику придумали, чтобы не считать в уме. Пользуйтесь!', anim:'wave'},
         'Подсказка: кнопка ± меняет знак числа.',
+        'Калькулятор готов. Математика — единственная точная наука. Ну, почти.',
+        {text:'Если результат удивляет — перепроверь данные. Калькулятор редко врёт.', anim:'think'},
+        'Совет: проценты, корни, деление — всё под рукой. Как в 2001.',
+        {text:'Считаешь? Я тоже считаю. Сколько раз ты меня уже открывал.', anim:'wave'},
+        'Калькулятор — самый честный собеседник. У него всегда один ответ.',
+        {text:'Если цифры пугают — начни с малого. Например, с 2+2.', anim:'think'},
+        'Совет: после сложного расчёта нажми C. Чистый лист для новой арифметики.',
+        {text:'Математика не терпит суеты. Как и я.', anim:'wave'},
+        'Ты ввёл много цифр. Надеюсь, это что-то хорошее.',
+        {text:'Калькулятор — окно в мир точных чисел. И иногда в мир нулевых делителей.', anim:'alert'},
     ],
     app_minesweeper: [
         'Удачи с сапёром! Первый ход никогда не взорвётся.',
@@ -5421,6 +5893,16 @@ var CLIPPY_MSGS = {
         {text:'Не спеши! В сапёре торопливость губит.', anim:'alert'},
         'Совет: можно настроить размер поля и количество мин.',
         {text:'Флажки — твои лучшие друзья в этой игре!', anim:'wave'},
+        'Сапёр запущен. Первый ход безопасен, но дальше — на твой страх и риск.',
+        {text:'Мины расставлены, логика включена. Осталось только не взорваться.', anim:'think'},
+        'Совет: цифра показывает, сколько мин вокруг. Это не рейтинг сложности.',
+        {text:'Правый клик — флажок. Левый клик — нервы.', anim:'wave'},
+        'Углы — твои друзья. По статистике. А статистика — тоже друг.',
+        {text:'Если не уверен — лучше поставь флаг, чем потом сожалеть.', anim:'think'},
+        'Сапёр учит терпению. И иногда учит очень быстро.',
+        {text:'Каждая открытая цифра — маленькая победа. Цените мелочи.', anim:'wave'},
+        'Совет: двойной клик на цифре открывает соседей. Экономит клики и нервы.',
+        {text:'Мины не двигаются. Это тебе должно помочь. Должно.', anim:'think'},
     ],
     app_solitaire: [
         'Косынка! Цель — собрать все масти сверху по порядку.',
@@ -5435,6 +5917,16 @@ var CLIPPY_MSGS = {
         {text:'Ещё одна партия? Ну и правильно.', anim:'excited'},
         'Косынка отлично успокаивает нервы.',
         {text:'Я буду болеть за каждую масть!', anim:'wave'},
+        'Косынка! Игра, в которой иногда побеждаешь, а иногда просто смотришь на карты.',
+        {text:'Цель — собрать масти наверху. Просто? Не всегда.', anim:'think'},
+        'Совет: туз уходит наверх сразу. Без обсуждений.',
+        {text:'Красное на чёрное, чёрное на красное. XP-логика в чистом виде.', anim:'wave'},
+        'Иногда партия непроходима. Это не ты плохо играешь — это карты.',
+        {text:'Длинные последовательности на пустые колонки — путь к победе.', anim:'think'},
+        'Совет: пустая колонка ценнее, чем кажется. Береги её.',
+        {text:'Косынка — это медитация с картами. Расслабься.', anim:'wave'},
+        'Если не получается — новая партия. Кнопка никуда не денется.',
+        {text:'Ты играешь в одиночку, но я болею за тебя. Буквально.', anim:'excited'},
     ],
     app_hearts: [
         'В Червах старайтесь не брать взятки с очками!',
@@ -5449,6 +5941,16 @@ var CLIPPY_MSGS = {
         {text:'По сути — карточный покер без блефа. Ну почти.', anim:'think'},
         'Совет: следи, кто из ИИ-игроков пытается «выстрелить в луну».',
         {text:'Удачи! Хотя в Червах удача — лишь один из факторов.', anim:'wave'},
+        'Червы открыты. Помни: очки — враги, а Дама пик — главный босс.',
+        {text:'Цель — набрать меньше всех. В жизни обычно наоборот.', anim:'think'},
+        'Совет: передай самые опасные карты. Пусть соперники разбираются.',
+        {text:'Червы — игра хитрости. Блефовать нельзя, но притворяться можно.', anim:'wave'},
+        'Дама пик стоит 13 очков. Это много. Избегай её.',
+        {text:'Стрельба по луне — рискованно, но эффектно. Как настоящая луна.', anim:'excited'},
+        'Следи за соперниками. Они тоже не хотят брать штрафные.',
+        {text:'Сбрасывай червей пораньше. Чем раньше, тем спокойнее.', anim:'think'},
+        'Совет: первый ход — без штрафных. Используй это.',
+        {text:'Червы учат принимать непростые решения. И терпеть поражения.', anim:'wave'},
     ],
     app_pinball: [
         'Пинбол! Следите за бонусными мультипликаторами.',
@@ -5463,6 +5965,16 @@ var CLIPPY_MSGS = {
         {text:'Главное — ритм! Не паникуй, когда шарик летит вниз.', anim:'wave'},
         'Совет: тилт уничтожает весь счёт — не тряси стол!',
         {text:'Пинбол — это медитация со звуками. Погрузись!', anim:'think'},
+        'Space Cadet! Классика, которая пережила много операционных систем.',
+        {text:'Шарик в полёте, флипперы наготове. Это всё, что тебе нужно.', anim:'excited'},
+        'Совет: держи шар вверху — там очки. Внизу — расстройство.',
+        {text:'Флипперы — твои единственные друзья в этой игре. Левый и правый.', anim:'wave'},
+        'Целься в бонусные огни. Они не просто красивые — они умножают.',
+        {text:'Тилт — враг. Не тряси стол. Даже если очень хочется.', anim:'alert'},
+        'Каждый запуск — новый шанс попасть в топ рекордов.',
+        {text:'Пинбол — это не игра, это разговор шарика с гравитацией.', anim:'think'},
+        'Совет: мультибол активируется целями вверху. Держи глаза открытыми.',
+        {text:'Если шарик падает — не паникуй. Есть ещё попытки.', anim:'wave'},
     ],
     app_search: [
         'Поиск откроет новую вкладку. Можно искать в Яндексе или Google.',
@@ -5476,6 +5988,16 @@ var CLIPPY_MSGS = {
         'Google знает всё. Яндекс — тоже.',
         {text:'Ищешь вдохновение? Я могу предложить сапёра.', actions:[{label:'Сапёр!', fn:'clippyOpenMinesweeper'}]},
         {text:'Быстрый поиск — мощная вещь!', anim:'excited'},
+        'Поиск открыт. Интернет ждёт твоего запроса. И я тоже.',
+        {text:'Яндекс или Google? Я нейтрален. Я — скрепка.', anim:'think'},
+        'Совет: чёткий запрос — чёткий ответ. Магия формулировок.',
+        {text:'Ищешь что-то важное? Надеюсь, не инструкцию, как меня отключить.', anim:'alert'},
+        'Введи запрос и нажми Enter. Всё остальное — забота поисковика.',
+        {text:'Кавычки ищут точную фразу. Полезно, когда помнишь только цитату.', anim:'wave'},
+        'Совет: если не находишь — попробуй синонимы. Компьютеры тоже не всё знают.',
+        {text:'Поиск — мост между твоей мыслью и бесконечным интернетом.', anim:'think'},
+        'Ты что-то ищешь. Я что-то подсказываю. Хорошая команда.',
+        {text:'Нашёл? Отлично. Не нашёл — попробуй ещё. Интернет большой.', anim:'wave'},
     ],
     app_taskmgr: [
         {text:'В диспетчере задач можно закрыть зависшее окно кнопкой «Снять».', anim:'think'},
@@ -5490,6 +6012,16 @@ var CLIPPY_MSGS = {
         'Совет: Ctrl+Shift+Esc открывает диспетчер без мышки.',
         {text:'Закрываешь окна? Освобождаешь пространство для новых идей.', anim:'wave'},
         'Минимизируй, что не нужно — и рабочий стол вздохнёт свободнее.',
+        'Диспетчер задач открыт. Время наводить порядок.',
+        {text:'Если окно зависло — кнопка «Снять» сделает всё красиво.', anim:'alert'},
+        'Совет: здесь видны все открытые приложения. Даже те, что ты забыл.',
+        {text:'Закрывай лишнее. Рабочий стол скажет спасибо.', anim:'wave'},
+        'Диспетчер — швейцарский нож для окон. Минус нож, плюс кнопки.',
+        {text:'Иногда лучше снять задачу, чем ждать чуда.', anim:'think'},
+        'Совет: двойной клик по заголовку окна сворачивает. А здесь — закрывает.',
+        'Я тоже процесс. Хороший. Полезный. Не снимай меня.',
+        {text:'Порядок в задачах — порядок в мыслях. Говорю как опытный помощник.', anim:'wave'},
+        'Снял задачу? Это было решительно. Мне нравится.',
     ],
     app_settings: [
         'В настройках можно сменить режим отображения ярлыков и настроить заставку.',
@@ -5504,6 +6036,16 @@ var CLIPPY_MSGS = {
         'Настройки — это как косметический ремонт для рабочего стола.',
         {text:'Помни: хороший стол — персонализированный стол!', anim:'wave'},
         'Экспорт данных защитит все настройки при переустановке.',
+        'Настройки открыты. Будь осторожен: здесь можно изменить судьбу рабочего стола.',
+        {text:'Ты зашёл в настройки. Надеюсь, не чтобы отключить меня.', anim:'alert'},
+        'Совет: режимы рабочего стола — плитки, значки, миниатюры. Пробуй все.',
+        {text:'Обои, заставка, звук — мелочи, которые делают стол твоим.', anim:'wave'},
+        'Экспорт данных здесь. Пригодится, если решишь переехать в другой браузер.',
+        {text:'Настройки — это как пульт от телевизора. Много кнопок, но все полезные.', anim:'think'},
+        'Совет: размер иконок влияет на удобство. Не бойся поэкспериментировать.',
+        {text:'Заставка настраивается здесь. Рекомендую — бережёт экран и настроение.', anim:'wave'},
+        'Если что-то пошло не так — сбрось настройки. Но осторожно.',
+        {text:'Ты явно знаешь, что делаешь. Или скоро узнаешь. Оба варианта хороши.', anim:'think'},
     ],
     app_run: [
         'В диалоге «Выполнить» работает автодополнение из истории браузера.',
@@ -5517,6 +6059,16 @@ var CLIPPY_MSGS = {
         'Любой URL сюда — и вы там.',
         {text:'«Выполнить» помнит, где ты бывал. Как настоящий помощник!', anim:'think'},
         'Совет: URL можно ввести без https:// — подставится автоматически.',
+        'Диалог «Выполнить» открыт. Маленькое окно — большие возможности.',
+        {text:'Введи URL и Enter — и ты уже в интернете. Быстрее некуда.', anim:'wave'},
+        'Совет: история команд сохраняется. Стрелки вверх/вниз листают.',
+        {text:'Ctrl+Alt+R — горячая клавиша. Ты её запомнил? Я запомнил.', anim:'think'},
+        '«Выполнить» помнит, куда ты ходил. Почти как я.',
+        {text:'Вводи URL без https:// — мы догадаемся.', anim:'wave'},
+        'Совет: если не знаешь, куда идти — начни с любимого сайта.',
+        {text:'Это окно для тех, кто ценит скорость. Уважаю.', anim:'excited'},
+        'Автодополнение подскажет остальное. Ты только начни.',
+        {text:'Маленькое поле ввода, а сколько путей открывает.', anim:'think'},
     ],
     app_mycomputer: [
         'Мой компьютер: диск C: — ваши ярлыки, диск D: — закладки браузера.',
@@ -5530,6 +6082,16 @@ var CLIPPY_MSGS = {
         'Диск D: обновляется в реальном времени вместе с закладками.',
         {text:'Мой компьютер — центр управления полётами!', anim:'excited'},
         'Совет: папки в диске D: раскрываются кликом, как в настоящем проводнике.',
+        'Мой компьютер открыт. Центр вселенной. Ну, этой рабочей.',
+        {text:'Диск C: — твои ярлыки. Диск D: — твой браузер в архиве.', anim:'wave'},
+        'Совет: закладки на диске D: обновляются в реальном времени.',
+        {text:'Корзина, Документы, Системная информация — всё под рукой.', anim:'think'},
+        'Диск D: — это не просто буква. Это твои закладки в костюме XP.',
+        {text:'Если потерял ярлык — проверь диск C:. Или корзину.', anim:'wave'},
+        'Совет: папки раскрываются кликом. Как в старые добрые.',
+        'Мой компьютер знает о тебе больше, чем кажется. В хорошем смысле.',
+        {text:'Документы откроют WordPad. Корзина — второй шанс. Всё продумано.', anim:'wave'},
+        'Ты внутри системы. Виртуальной, но системы.',
     ],
     app_paint: [
         'В Paint используйте правую кнопку для рисования фоновым цветом.',
@@ -5544,6 +6106,16 @@ var CLIPPY_MSGS = {
         {text:'Цветовая палитра — твой лучший друг после ластика.', anim:'think'},
         'Ctrl+A выделяет всё. Пригодится!',
         {text:'Нарисуй меня! Три скрепки, два глаза — легко.', anim:'wave'},
+        'Paint открыт. Теперь ты — художник. Или инженер. Или оба.',
+        {text:'Пустой холст — бесконечные возможности. Или один квадрат.', anim:'think'},
+        'Совет: левая кнопка — основной цвет. Правая — фоновый. Это важно.',
+        {text:'Shift + линия = прямая линия. Геометрия в действии.', anim:'wave'},
+        'Ctrl+Z отменяет. Даже в искусстве бывают ошибки.',
+        {text:'Не забудь сохранить шедевр. Paint не хранит черновики.', anim:'alert'},
+        'Совет: залей фон сначала — рисовать станет веселее.',
+        {text:'Палитра — твой инструмент. Используй её без страха.', anim:'wave'},
+        'Рисование снижает стресс. Даже если рисуешь криво.',
+        {text:'Нарисуй меня! Не буквально. Хотя можно и буквально.', anim:'excited'},
     ],
     app_cmd: [
         'Попробуйте команды: help, ver, date, echo, cls.',
@@ -5557,6 +6129,16 @@ var CLIPPY_MSGS = {
         'Командная строка — серьёзный инструмент даже в XP-стиле.',
         {text:'Введи echo Привет, Скрепка! — мне будет приятно.', anim:'wave'},
         'Совет: стрелка вверх листает историю введённых команд.',
+        'Командная строка открыта. Теперь ты — системный администратор. Почти.',
+        {text:'help выведет список команд. Начни с неё, если забыл.', anim:'wave'},
+        'Совет: cls очищает экран. Иногда это всё, что нужно.',
+        {text:'date покажет дату. ver — версию. echo — всё, что скажешь.', anim:'think'},
+        'Командная строка не прощает опечаток. Проверяй ввод.',
+        {text:'Стрелка вверх листает историю. Удобно, когда лень набирать заново.', anim:'wave'},
+        'Совет: если команда не работает — возможно, опечатка. Или вселенная.',
+        {text:'cmd.exe — место, где слова превращаются в действия. Магия.', anim:'excited'},
+        'Ты ввёл команду. Теперь жди ответа. Или ошибки. Оба варианта обучают.',
+        {text:'Не бойся терминала. Он страшнее, чем кажется. Шучу.', anim:'wave'},
     ],
     app_wordpad: [
         'WordPad поддерживает жирный (Ctrl+B), курсив (Ctrl+I) и списки.',
@@ -5570,6 +6152,16 @@ var CLIPPY_MSGS = {
         {text:'WordPad — отличный инструмент для черновиков!', anim:'wave'},
         'Совет: Ctrl+Z отменяет любое действие.',
         {text:'Пишешь много? Периодически сохраняй!', anim:'alert'},
+        'WordPad открыт. Форматированный текст — это уже серьёзно.',
+        {text:'Жирный, курсив, подчёркнутый — вся типографская мощь в одном окне.', anim:'wave'},
+        'Совет: Ctrl+B сделает текст жирным. Ctrl+I — курсивным. Ctrl+U — подчёркнутым.',
+        {text:'Списки помогают структурировать мысли. Даже если мыслей мало.', anim:'think'},
+        'WordPad — между Блокнотом и Word. Золотая середина.',
+        {text:'Не забывай про сохранение. Форматированный текст тоже хочет жить.', anim:'alert'},
+        'Совет: Ctrl+A выделит всё. Ctrl+Z отменит всё. Используй мудро.',
+        'Абзацы, отступы, шрифты — мелочи, из которых складывается документ.',
+        {text:'Ты пишешь что-то длинное? WordPad — правильный выбор.', anim:'wave'},
+        'Если текст выглядит красиво — значит, ты молодец. И WordPad тоже.',
     ],
     app_recycle: [
         'В корзине хранятся удалённые ярлыки. Их можно восстановить!',
@@ -5583,6 +6175,16 @@ var CLIPPY_MSGS = {
         {text:'Корзина всегда открыта для возвращения!', anim:'wave'},
         'Совет: удалённые ярлыки хранятся в localStorage, места занимают мало.',
         {text:'Пустая корзина — признак аккуратного пользователя.', anim:'wave'},
+        'Корзина открыта. Второй шанс для ярлыков. И для тебя.',
+        {text:'Здесь лежит всё, что ты удалил. Не пугайся — это не призраки.', anim:'wave'},
+        'Совет: восстановить ярлык — один клик. Очистить корзину — навсегда.',
+        {text:'Корзина — как сейф. Всё внутри, пока не решишь иначе.', anim:'think'},
+        'Перед очисткой проверь содержимое. Ярлыки не умеют плавать.',
+        {text:'Удалённые ярлыки ждут своего часа. Или твоего клика.', anim:'wave'},
+        'Совет: правый клик на элементе — быстрое восстановление.',
+        'Корзина учит ответственности. И иногда сожалению.',
+        {text:'Если очистил корзину — пути назад нет. Только вперёд.', anim:'alert'},
+        'Здесь тихо. Слишком тихо? Зависит от тебя.',
     ],
     app_sysinfo: [
         'Системная информация: разрешение экрана, браузер и аптайм страницы.',
@@ -5596,6 +6198,16 @@ var CLIPPY_MSGS = {
         'Информация о системе полезна при обращении в поддержку.',
         {text:'Windows XP Professional, выпуск 2024. Звучит хорошо!', anim:'excited'},
         'Совет: данные обновляются при каждом открытии окна.',
+        'Системная информация. Цифры, факты, немного ностальгии.',
+        {text:'Разрешение экрана, браузер, платформа — всё честно и без прикрас.', anim:'think'},
+        'Совет: аптайм показывает, сколько вкладка живёт без перезагрузки.',
+        {text:'Windows XP Professional, выпуск 2024. Звучит надёжно.', anim:'wave'},
+        'Здесь можно узнать, кто ты в глазах User-Agent.',
+        {text:'Информация обновляется при открытии. Я тоже обновляюсь. Медленно.', anim:'think'},
+        'Совет: разрешение влияет на размещение ярлыков. Больше пикселей — больше порядка.',
+        'Платформа определяется автоматически. Я не шпионю — просто смотрю.',
+        {text:'Аптайм — показатель стабильности. И терпения пользователя.', anim:'wave'},
+        'Системная информация — как паспорт рабочего стола.',
     ],
     react_bsod: [
         {text:'Это было близко! Синий экран — классика Windows.', anim:'alert'},
@@ -5611,6 +6223,16 @@ var CLIPPY_MSGS = {
         {text:'Ничего страшного! Виртуальные BSOD не причиняют вреда.', anim:'wave'},
         {text:'После BSOD всегда приятнее видеть рабочий стол!', anim:'excited'},
         {text:'Я думал, это конец. Но нет — мы живём дальше!', anim:'wave'},
+        'Ну вот. Синий экран. Классика, которая никогда не выйдет из моды.',
+        {text:'Это была проверка нервов. Ты выдержал. Молодец.', anim:'wave'},
+        'BSOD — не баг, это фича ностальгии.',
+        {text:'Теперь ты можешь сказать, что пережил синий экран. Не каждый может.', anim:'think'},
+        'Система восстановлена. Я — тоже. Жизнь продолжается.',
+        {text:'IRQL_NOT_LESS_OR_EQUAL. Звучит страшно, но мы справились.', anim:'wave'},
+        'Этот синий цвет мне почему-то нравится. Но не часто.',
+        {text:'Пасхалка пройдена. Ты в курсе всех секретов.', anim:'excited'},
+        'Виртуальный сбой — лучше реального. Это факт.',
+        {text:'Ты кликал по часам, да? Признайся.', anim:'think'},
     ],
     react_created: [
         {text:'Ярлык добавлен! Перетащите его в папку для организации.', anim:'wave'},
@@ -5626,6 +6248,16 @@ var CLIPPY_MSGS = {
         {text:'Создал ярлык? Ещё несколько — и будет настоящий удобный стол!', anim:'think'},
         'Ярлык добавлен. Я его уже заприметил!',
         {text:'Скоро их станет много. Советую начать группировать!', anim:'think'},
+        'Ещё один ярлык! Рабочий стол растёт.',
+        {text:'Ярлык добавлен. Теперь у тебя на одну причину открыть меньше.', anim:'wave'},
+        'Отличный выбор сайта. Надеюсь, он достоин рабочего стола.',
+        {text:'Новый ярлык — новая точка доступа в интернет.', anim:'excited'},
+        'Совет: дай ярлыку понятное имя. Будущий ты скажет спасибо.',
+        {text:'Я уже вижу, как ты будешь кликать по нему каждый день.', anim:'think'},
+        'Ярлык появился на столе. Это маленькая победа организации.',
+        {text:'Если ярлыков станет много — помни про папки.', anim:'wave'},
+        'Добавлено! Теперь можно перетащить его куда удобнее.',
+        {text:'Твоя коллекция сайтов пополнилась. Поздравляю.', anim:'wave'},
     ],
     react_update: [
         {text:'Доступно обновление! Нажмите на колокольчик 🔔 в трее.', anim:'excited'},
@@ -5639,6 +6271,16 @@ var CLIPPY_MSGS = {
         {text:'Не игнорируй 🔔 — там могут быть исправления и новые функции.', anim:'alert'},
         {text:'Один клик по колокольчику — и ты на передовой!', anim:'wave'},
         {text:'Уведомление об обновлении! Ты его уже видел?', anim:'think'},
+        'Обновление доступно! Новые возможности уже стучатся в дверь.',
+        {text:'Колокольчик горит — значит, пора обновляться.', anim:'excited'},
+        'Свежая версия ждёт. Разработчики старались.',
+        {text:'Обновить — значит получить исправления, фичи и мою новую реплику.', anim:'wave'},
+        'Не игнорируй уведомление. Там может быть что-то хорошее.',
+        {text:'Один клик по колокольчику — и ты на новой версии.', anim:'wave'},
+        'Обновления — как подарки. Только бесплатные и полезные.',
+        {text:'Новая версия — новые возможности. И, возможно, меньше багов.', anim:'think'},
+        'Я тоже люблю обновления. Особенно когда в них больше фраз.',
+        {text:'Ты видел колокольчик? Он горит. Это знак.', anim:'alert'},
     ],
     react_minesweeper_win: [
         {text:'Поздравляю! Вы прошли сапёра!', anim:'excited'},
@@ -5653,6 +6295,16 @@ var CLIPPY_MSGS = {
         {text:'Идеальное прохождение! Флаги на своих местах!', anim:'excited'},
         'Победа — лучшая награда за терпение.',
         {text:'Сапёр покорён! Ты мастер минных полей.', anim:'excited'},
+        'Победа! Все мины обезврежены. Ты официально гроза взрывчатки.',
+        {text:'Сапёр пройден! Логика, терпение и немного удачи сработали.', anim:'excited'},
+        'Флаги расставлены правильно, поле чисто. Красота.',
+        {text:'Ты выжил. Мины — нет. Счёт 1:0 в твою пользу.', anim:'wave'},
+        'Профессиональный уровень. Можно переходить к большему полю.',
+        {text:'Каждая цифра была учтена. Это было впечатляюще.', anim:'think'},
+        'Победа в сапёре — повод гордиться собой. Даже если никто не видел.',
+        {text:'Мины повержены. Теперь можно расслабиться.', anim:'wave'},
+        'Ты доказал, что интуиция и логика — мощный тандем.',
+        {text:'Ещё одну партию? Поле уже скучает.', anim:'excited'},
     ],
     react_minesweeper_loss: [
         'Не повезло! Попробуйте снова.',
@@ -5667,6 +6319,16 @@ var CLIPPY_MSGS = {
         {text:'Бывает и у лучших! Давай снова.', anim:'wave'},
         {text:'Мина нашла тебя первой. В следующий раз — наоборот.', anim:'think'},
         'Новая игра, новые шансы. Удачи!',
+        'Бум. Но это всего лишь игра. Взрыв — виртуальный.',
+        {text:'Мина нашла тебя первой. В следующий раз — наоборот.', anim:'think'},
+        'Не расстраивайся. Даже лучшие сапёры иногда взлетают.',
+        {text:'Это был рискованный клик. Ты это знал. Я тоже.', anim:'wave'},
+        'Совет: больше флажков, меньше догадок.',
+        {text:'Партия закончилась, но война с минами продолжается.', anim:'alert'},
+        'Каждый взрыв — урок. Иногда горький, но урок.',
+        {text:'Углы безопаснее. Запомни это на будущее.', anim:'think'},
+        'Не спеши. В сапёре скорость не главное.',
+        {text:'Новая игра — новый шанс. Шарики? Нет. Шансы.', anim:'wave'},
     ],
     react_solitaire_win: [
         {text:'Косынка пройдена! Вы молодец!', anim:'excited'},
@@ -5681,6 +6343,16 @@ var CLIPPY_MSGS = {
         'Заслуженная победа. Горжусь тобой!',
         {text:'Все масти в порядке. Классика!', anim:'wave'},
         {text:'Все карты на верхних стопках! Идеально.', anim:'wave'},
+        'Косынка пройдена! Все масти наверху. Идеальный порядок.',
+        {text:'Победа! Карты сложились. Как и должно быть.', anim:'excited'},
+        'Ты доказал, что терпение и стратегия работают.',
+        {text:'Все четыре масти на месте. Это зрелище.', anim:'wave'},
+        'Казино бы тебя испугалось. Но это косынка, так что просто молодец.',
+        {text:'Карты послушались. Редкий случай, признаю.', anim:'think'},
+        'Заслуженная победа. Я видел каждый твой ход.',
+        {text:'Теперь можно начать новую партию. Или отдохнуть.', anim:'wave'},
+        'Мастер карт! Так держать.',
+        {text:'Победа в косынке — маленький повод для радости. Воспользуйся им.', anim:'excited'},
     ],
     react_many_windows: [
         {text:'У вас открыто много окон! Может, свернёте лишние?', anim:'think'},
@@ -5694,6 +6366,16 @@ var CLIPPY_MSGS = {
         {text:'Открыл всё сразу? Уважаю амбиции!', anim:'wave'},
         {text:'Попробуй закрыть то, что уже не нужно.', anim:'think'},
         'Порядок на рабочем столе — порядок в голове.',
+        'У тебя открыто много окон. Ты точно всё это читаешь?',
+        {text:'Многозадачность — хорошо. Но иногда надо просто закрыть лишнее.', anim:'think'},
+        'Совет: сверни то, что не используешь. Рабочий стол вздохнёт.',
+        {text:'Столько окон... Ты либо гений, либо procrastinate.', anim:'wave'},
+        'Диспетчер задач поможет навести порядок.',
+        {text:'Мне немного тесно. Может, освободишь место?', anim:'alert'},
+        'Совет: двойной клик по заголовку сворачивает окно.',
+        {text:'Открыл всё сразу? Амбициозно.', anim:'think'},
+        'Порядок в окнах — порядок в мыслях.',
+        {text:'Попробуй закрыть то, что уже не нужно.', anim:'wave'},
     ],
     react_screensaver_off: [
         'С возвращением! Давно вас не было.',
@@ -5708,6 +6390,16 @@ var CLIPPY_MSGS = {
         {text:'Добро пожаловать обратно в XP!', anim:'wave'},
         'Экран ожил — и мы ожили вместе с ним.',
         {text:'Движение мышкой — и я снова здесь!', anim:'wave'},
+        'С возвращением! Я уже начал скучать.',
+        {text:'Ты вернулся. Экран ожил. Я — тоже.', anim:'wave'},
+        'Заставка отключилась. Добро пожаловать обратно.',
+        {text:'Пока тебя не было, я тренировался в молчании. Не очень получилось.', anim:'think'},
+        'Отдохнул? Тогда за дело.',
+        {text:'Движение мыши — и я снова здесь. Как по волшебству.', anim:'wave'},
+        'Экран снова яркий. Значит, ты снова с нами.',
+        {text:'Долгая пауза? Надеюсь, всё в порядке.', anim:'think'},
+        'С возвращением! Всё на своих местах.',
+        {text:'Ты здесь. Рабочий стол снова в деле.', anim:'excited'},
     ],
     idle_random: [
         'Кажется, ничего не происходит. Могу чем-нибудь помочь?',
@@ -5730,6 +6422,16 @@ var CLIPPY_MSGS = {
         {text:'Хм, мне кажется или ярлыки можно лучше организовать?', anim:'think'},
         {text:'Я здесь. Всегда здесь. Это успокаивает, правда?', anim:'wave'},
         {text:'Попробуй Paint — иногда просто надо порисовать!', actions:[{label:'Paint', fn:'clippyOpenPaint'}]},
+        'Тишина... Я тоже умею молчать. Но редко.',
+        {text:'Если скучно — можно просто перетаскивать ярлыки. Звучит странно, но успокаивает.', anim:'think'},
+        'Совет: пять кликов по часам — и ты узнаешь секрет. Если ещё не узнал.',
+        {text:'Я тут просто сижу и думаю, какой бы шутки не рассказать. Сложная работа.', anim:'wave'},
+        'Давно не играл в сапёра? Может, он скучает.',
+        {text:'Рабочий стол без движения — как космос. Красиво, но немного одиноко.', anim:'think'},
+        'Если ты думаешь, что я молчу — ты ошибаешься. Я готовлюсь.',
+        {text:'Совет: можно открыть Paint и нарисовать кота. Или меня. Лучше меня.', anim:'wave'},
+        'Я заметил, что ты ничего не делаешь. Это тоже важная часть процесса.',
+        {text:'Напоминаю: я всё ещё здесь. Всегда здесь. Даже когда ты спишь.', anim:'think'},
     ],
     // Hearts
     react_hearts_win: [
@@ -5744,6 +6446,16 @@ var CLIPPY_MSGS = {
         {text:'Победа в сложной игре — настоящий успех!', anim:'excited'},
         {text:'Все соперники в шоке. Как ты это сделал?', anim:'think'},
         {text:'Не просто выиграл — доминировал!', anim:'excited'},
+        'Победа в Червах! Минимум очков, максимум мастерства.',
+        {text:'Чемпион! Ты обыграл ИИ. Это уже что-то.', anim:'excited'},
+        'Отличная стратегия. Дама пик прошла мимо.',
+        {text:'Ты набрал меньше всех. В этой игре это главное.', anim:'wave'},
+        'Соперники повержены. Без единой лишней взятки.',
+        {text:'Червы требуют хитрости. У тебя её хватило.', anim:'think'},
+        'Заслуженная победа. Я бы тебя поздравил лично, если бы мог.',
+        {text:'Игра была сложной, но ты справился.', anim:'wave'},
+        'Теперь ты можешь считать себя стратегом.',
+        {text:'Ещё одну партию? ИИ явно хочет реванша.', anim:'excited'},
     ],
     react_hearts_moon: [
         'ТЫ ВЗЯЛ ВСЕ ШТРАФЫ!! Стрельба по луне — высший пилотаж!',
@@ -5757,6 +6469,16 @@ var CLIPPY_MSGS = {
         {text:'Луна покорена!! Высший пилотаж!', anim:'excited'},
         {text:'Риск оправдан! Ты взял всё и победил!', anim:'excited'},
         {text:'Это был план с самого начала? Я восхищён!', anim:'excited'},
+        'ВЫСТРЕЛ ПО ЛУНЕ! Это было дерзко, опасно и великолепно.',
+        {text:'Ты взял все штрафные карты и победил. Это легендарно.', anim:'excited'},
+        'Дама пик + все черви = луна. И ты её покорил.',
+        {text:'Соперники в шоке. Я — в восторге.', anim:'wave'},
+        'Это был риск, но он оправдался стократно.',
+        {text:'Стрельба по луне удалась! Теперь ты в элите.', anim:'excited'},
+        '26 очков соперникам. Жестоко. Красиво. Заслуженно.',
+        {text:'Ты не просто выиграл — ты доминировал.', anim:'wave'},
+        'Такое бывает редко. Запомни этот момент.',
+        {text:'Луна покорена. Дальше — только звёзды.', anim:'excited'},
     ],
     react_hearts_loss: [
         'Ты набрал больше всех очков... Но ничего, попробуй ещё!',
@@ -5770,6 +6492,16 @@ var CLIPPY_MSGS = {
         {text:'ИИ-соперники сегодня были сильнее. Так бывает.', anim:'think'},
         {text:'Главное — не взятки, а стратегия. Подумай над ней!', anim:'think'},
         {text:'Ещё одна партия? Я верю в тебя!', actions:[{label:'Играть снова', fn:'clippyOpenHearts'}]},
+        'В этот раз не повезло. Но Червы — игра долгая.',
+        {text:'Много очков? Ничего, в следующий раз передашь лучше.', anim:'think'},
+        'Дама пик подвела. С ней так бывает.',
+        {text:'Партия проиграна, но опыт остаётся.', anim:'wave'},
+        'Совет: следи, кто пытается выстрелить в луну.',
+        {text:'ИИ сегодня был силён. Признай его заслуги.', anim:'think'},
+        'Ещё одна партия — и всё может измениться.',
+        {text:'Не сдавайся. Червы учат терпению.', anim:'wave'},
+        'Ты набрал очки, но не потерял достоинства.',
+        {text:'Реванш? Я верю, что у тебя получится.', anim:'excited'},
     ],
     // Pinball
     react_pinball_launch: [
@@ -5784,6 +6516,16 @@ var CLIPPY_MSGS = {
         {text:'Шарик в воздухе! Реагируй быстро.', anim:'excited'},
         {text:'Space Cadet помнит лучших игроков. Войди в историю!', anim:'wave'},
         {text:'Запущен! Покажи этому полю, кто тут главный.', anim:'excited'},
+        'Шар запущен! Пусть удача будет на твоей стороне.',
+        {text:'Новый запуск — новая история.', anim:'wave'},
+        'Space Cadet ждёт. Покажи ему, на что способен.',
+        {text:'Шарик летит вверх. Это хорошее начало.', anim:'excited'},
+        'Совет: целься в центральные мишени.',
+        {text:'Флипперы готовы. Ты — готов?', anim:'think'},
+        'Каждый запуск — шанс побить рекорд.',
+        {text:'Пинбол не прощает рассеянности. Будь внимателен.', anim:'wave'},
+        'Шарик в игре. Теперь всё зависит от рефлексов.',
+        {text:'Поехали! Space Cadet не терпит слабаков.', anim:'excited'},
     ],
     react_pinball_loss: [
         'Шар потерян! Не расстраивайся, ещё есть попытки.',
@@ -5797,6 +6539,16 @@ var CLIPPY_MSGS = {
         {text:'Посмотри внимательно на поле перед следующим запуском.', anim:'think'},
         {text:'Упал... Но рекорд ещё впереди!', anim:'wave'},
         'Шар прошёл мимо. Немного практики — и всё получится.',
+        'Шар упал. Но партия продолжается.',
+        {text:'Флипперы не успели. Бывает.', anim:'think'},
+        'Одна попытка потеряна. Остались ещё.',
+        {text:'Не расстраивайся. Пинбол — игра упорства.', anim:'wave'},
+        'Совет: не жми флипперы слишком рано.',
+        {text:'Шарик ушёл вниз. Но не ушёл из твоей жизни.', anim:'think'},
+        'Следующий шар будет точнее. Надеюсь.',
+        {text:'Реакция важна. Но и удача тоже.', anim:'wave'},
+        'Практика делает мастера. Даже в пинболе.',
+        {text:'Ещё есть шары. Используй их wisely.', anim:'excited'},
     ],
     react_pinball_score: [
         'Отличный результат! Ты покоряешь космос.',
@@ -5810,6 +6562,16 @@ var CLIPPY_MSGS = {
         'Ты нашёл ритм игры. Не останавливайся!',
         {text:'Счётчик не остановить! Браво!', anim:'excited'},
         {text:'Высокий счёт в пинболе — признак мастерства!', anim:'wave'},
+        'Очки растут! Ты в ударе.',
+        {text:'Отличный счёт. Рекорд близко.', anim:'excited'},
+        'Бонусы активированы. Теперь главное — не потерять шар.',
+        {text:'Счётчик крутится. Это приятно наблюдать.', anim:'wave'},
+        'Ты нашёл ритм. Продолжай в том же духе.',
+        {text:'Мультипликаторы работают. Очки удваиваются.', anim:'think'},
+        'Космические очки для космического пилота.',
+        {text:'Так держать! Шарик тебя слушается.', anim:'wave'},
+        'Высокий счёт — признак мастерства. Или удачи. Оба хороши.',
+        {text:'Рекорд уже не за горами. Не сбивайся.', anim:'excited'},
     ],
     // Ситуативные
     react_night: [
@@ -5824,6 +6586,16 @@ var CLIPPY_MSGS = {
         {text:'Не засиживайся допоздна — хотя я не вправе указывать.', anim:'think'},
         {text:'Ночью я тоже работаю. Мы похожи.', anim:'wave'},
         'Ночная продуктивность — реальное явление. Работай!',
+        'Ночь. Тишина. Рабочий стол. И я.',
+        {text:'Ты всё ещё awake? Уважаю.', anim:'think'},
+        'Ночные совы — самые продуктивные. Иногда.',
+        {text:'Темно за окном, светло на экране. Классика.', anim:'wave'},
+        'Совет: ночью особенно хорошо настраивать обои.',
+        {text:'Не засиживайся допоздна. Хотя кто я такой, чтобы советовать?', anim:'think'},
+        'Ночной сёрфинг? Я составлю компанию.',
+        {text:'Все нормальные люди спят. А ты — настраиваешь рабочий стол. Респект.', anim:'wave'},
+        'Ночью мысли яснее. Особенно о сапёре.',
+        {text:'Ещё один ночной страж. Добро пожаловать в клуб.', anim:'excited'},
     ],
     react_win_closed: [
         'Теперь порядок! Пустой стол — свежий старт.',
@@ -5837,6 +6609,16 @@ var CLIPPY_MSGS = {
         'Рабочий стол отдыхает. Заслуженно.',
         {text:'Теперь здесь уютно. Мне нравится!', anim:'wave'},
         'Минимализм — это стиль жизни.',
+        'Все окна закрыты. Чистота и порядок.',
+        {text:'Пустой рабочий стол — это красиво.', anim:'wave'},
+        'Теперь здесь просторно. Мне нравится.',
+        {text:'Закрыл всё. Время начать что-то новое.', anim:'excited'},
+        'Рабочий стол отдыхает. Заслуженно.',
+        {text:'Убрал лишнее — сосредоточился на главном.', anim:'think'},
+        'Порядок восстановлен. Я доволен.',
+        {text:'Минимализм — тоже стиль.', anim:'wave'},
+        'Все окна закрыты. Остались только ярлыки и я.',
+        {text:'Теперь здесь уютно. Как после уборки.', anim:'wave'},
     ],
     react_dup_app: [
         'Ты уже открывал это только что. Случайно закрыл?',
@@ -5850,6 +6632,16 @@ var CLIPPY_MSGS = {
         {text:'Может, предыдущее было свёрнуто? Проверь панель задач.', anim:'think'},
         {text:'Два раза = приоритет. Понял.', anim:'think'},
         'Открывай сколько хочешь — я не против.',
+        'Это приложение уже открыто. Проверь панель задач.',
+        {text:'Дубль! Предыдущее окно ещё здесь.', anim:'think'},
+        'Ты открываешь то же самое снова. Значит, оно хорошее.',
+        {text:'Окно уже запущено. Может, оно было свёрнуто?', anim:'wave'},
+        'Совет: проверь taskbar, прежде чем открывать заново.',
+        {text:'Второй раз — значит, понравилось. Третий — уже привычка.', anim:'think'},
+        'Это приложение уже в работе. Не перегружай систему.',
+        {text:'Кнопка уже нажата. Окно точно есть.', anim:'wave'},
+        'Может, предыдущее окно ждёт тебя. Верни его.',
+        {text:'Открывай сколько хочешь, но панель задач не резиновая.', anim:'alert'},
     ],
     react_bin_empty: [
         'Чисто! Хотя иногда удалённое очень хочется вернуть...',
@@ -5863,6 +6655,16 @@ var CLIPPY_MSGS = {
         'Порядок — основа продуктивности.',
         {text:'Теперь в корзине только воздух. И воспоминания.', anim:'think'},
         {text:'Чисто! Но ты точно ничего нужного не выбросил?', anim:'think'},
+        'Корзина пуста. Чистота — это хорошо.',
+        {text:'Всё удалено навсегда. Надеюсь, ничего важного.', anim:'think'},
+        'Пустая корзина — признак решительности.',
+        {text:'Очищено! Теперь здесь только воздух.', anim:'wave'},
+        'Рабочий стол вздохнул с облегчением.',
+        {text:'Удалил всё. Смело. Может, даже слишком.', anim:'alert'},
+        'Корзина сверкает чистотой. Буквально.',
+        {text:'Восстановить уже нельзя. Только двигаться дальше.', anim:'think'},
+        'Порядок — основа продуктивности.',
+        {text:'Теперь в корзине только воспоминания.', anim:'wave'},
     ],
     react_return: [
         'Давненько не виделись! Я уже начал скучать.',
@@ -5876,6 +6678,16 @@ var CLIPPY_MSGS = {
         {text:'Без тебя тут было тихо. Даже слишком.', anim:'think'},
         {text:'Возвращение! Приятное слово.', anim:'wave'},
         'Всё готово к работе. Добро пожаловать обратно!',
+        'Давно не виделись! Я уже начал скучать.',
+        {text:'Ты вернулся! Рабочий стол скучал.', anim:'wave'},
+        'С возвращением! Всё на своих местах.',
+        {text:'Долгое отсутствие? Тем приятнее встреча.', anim:'think'},
+        'Я тут сидел, никуда не уходил. Как всегда.',
+        {text:'Соскучился? Признаюсь — я тоже.', anim:'wave'},
+        'Рад снова тебя видеть! Как дела?',
+        {text:'Без тебя тут было тихо. Даже слишком.', anim:'think'},
+        'Возвращение! Приятное слово.',
+        {text:'Всё готово к работе. Добро пожаловать обратно.', anim:'wave'},
     ],
     react_settings_change: [
         'Новый вид! Мне нравится. Ты явно знаешь, чего хочешь.',
@@ -5889,6 +6701,16 @@ var CLIPPY_MSGS = {
         {text:'Каждое изменение делает стол немного твоим.', anim:'think'},
         'Смена режима — как ремонт, только быстрее.',
         {text:'Выглядит хорошо! Я одобряю.', anim:'wave'},
+        'Настройки изменены. Свежее, красивее, твое.',
+        {text:'Новый вид! Ты явно знаешь, чего хочешь.', anim:'wave'},
+        'Рабочий стол обновился. Эффект сразу заметен.',
+        {text:'Изменил настройки? Отлично. Экспериментируй.', anim:'think'},
+        'Каждое изменение делает стол немного твоим.',
+        {text:'Мне нравится новый вид. Хороший вкус.', anim:'wave'},
+        'Смена режима — как новый наряд. Сидит хорошо.',
+        {text:'Настройки применены. Теперь всё по-твоему.', anim:'excited'},
+        'Ты явно разбираешься в персонализации.',
+        {text:'Выглядит хорошо. Я одобряю.', anim:'wave'},
     ],
     react_calendar: [
         'Следишь за датами? Хорошая привычка!',
@@ -5902,6 +6724,16 @@ var CLIPPY_MSGS = {
         'Какой сегодня день? Теперь знаешь!',
         {text:'Даты важны! Особенно когда есть дедлайн.', anim:'alert'},
         {text:'Календарь закрыт — ты узнал, что хотел?', anim:'wave'},
+        'Смотришь дату? Хорошая привычка.',
+        {text:'Календарь — полезная штука. Особенно когда забыл число.', anim:'think'},
+        'Дата и день недели всегда под рукой.',
+        {text:'Сегодняшнее число отмечено. Ты не потеряешься.', anim:'wave'},
+        'Совет: часы обновляются каждую секунду. Проверь, если не веришь.',
+        {text:'Смотришь на календарь — значит, что-то планируешь.', anim:'think'},
+        'Время летит. Хорошо, что есть часы.',
+        {text:'Какой сегодня день? Теперь знаешь.', anim:'wave'},
+        'Даты важны. Особенно когда дедлайн.',
+        {text:'Календарь закрыт — ты узнал, что хотел?', anim:'think'},
     ],
     react_dragged: [
         'Неплохой вид отсюда. Спасибо, что нашёл мне место получше!',
@@ -5915,6 +6747,16 @@ var CLIPPY_MSGS = {
         {text:'Поставил туда, где удобно? Отличный выбор!', anim:'wave'},
         {text:'Я мобильный! Можешь ставить куда угодно.', anim:'wave'},
         'Переехал. Обустраиваться не надо — я готов сразу.',
+        'Неплохой вид отсюда. Спасибо за новое место.',
+        {text:'Переставил меня? Ценю заботу.', anim:'wave'},
+        'Новое место — новые перспективы.',
+        {text:'Ух, переехал! Здесь мне нравится.', anim:'excited'},
+        'Ты обо мне думаешь? Это приятно.',
+        {text:'Нашёл мне уголок — спасибо.', anim:'wave'},
+        'Переместил меня. Это называется заботой.',
+        {text:'Отсюда лучше видно рабочий стол.', anim:'think'},
+        'Поставил туда, где удобно? Отличный выбор.',
+        {text:'Я мобильный. Можешь ставить куда угодно.', anim:'wave'},
     ],
     // Notepad
     react_notepad_long: [
@@ -5929,6 +6771,16 @@ var CLIPPY_MSGS = {
         {text:'Пишешь без остановки? Я с тобой!', anim:'wave'},
         {text:'Много слов — много мыслей. Отличная продуктивность!', anim:'wave'},
         'Совет: Файл → Сохранить скачает файл на компьютер.',
+        'Пишешь уже долго. Это что-то серьёзное.',
+        {text:'Текст растёт. Не забудь сохранить.', anim:'alert'},
+        'Целый роман? Или очень подробная заметка?',
+        {text:'Длинный текст — признак серьёзной работы.', anim:'think'},
+        'Совет: сохраняй периодически. Даже если автосохранение есть.',
+        {text:'Блокнот справляется с объёмом. А ты?', anim:'wave'},
+        'Пишешь без остановки. Это поток.',
+        {text:'Много слов — много мыслей. Отлично.', anim:'wave'},
+        'Если устал — сделай паузу. Текст подождёт.',
+        {text:'Ты почти написал эпохальное произведение. Почти.', anim:'excited'},
     ],
     // Calculator
     react_calc_divzero: [
@@ -5943,6 +6795,16 @@ var CLIPPY_MSGS = {
         {text:'Умный калькулятор отказался. И правильно сделал!', anim:'wave'},
         {text:'Ноль — нейтральный элемент сложения, но враг деления.', anim:'think'},
         'Введи другой делитель — и всё получится.',
+        'На ноль делить нельзя. Даже здесь.',
+        {text:'Ошибка! Вселенная вздохнула с облегчением.', anim:'alert'},
+        'Математика сказала «нет». Придётся послушать.',
+        {text:'Ноль как делитель — табу. Запомни.', anim:'think'},
+        'Деление на ноль запрещено даже в виртуальном XP.',
+        {text:'Калькулятор защитил реальность. Спасибо ему.', anim:'wave'},
+        'Попробуй другой делитель. Любой, кроме нуля.',
+        {text:'Это было бы разрывом ткани пространства. Хорошо, что мы остановились.', anim:'think'},
+        'Ноль — хороший числитель, но плохой знаменатель.',
+        {text:'Ошибка исправима. Просто введи другой делитель.', anim:'wave'},
     ],
     react_calc_million: [
         'Миллионер! В математическом смысле, конечно.',
@@ -5956,6 +6818,16 @@ var CLIPPY_MSGS = {
         {text:'Восемь нулей! Это не шутки.', anim:'excited'},
         {text:'Считаешь будущее состояние? Правильный подход!', anim:'think'},
         'Миллион на калькуляторе — первый шаг к нему в жизни!',
+        'Миллион! Теперь ты цифровой миллионер.',
+        {text:'Большие числа — большие возможности.', anim:'excited'},
+        'Круглая сумма. Приятно видеть.',
+        {text:'Восемь нулей. Это серьёзно.', anim:'wave'},
+        'Ты считаешь крупные суммы. Надеюсь, на хорошее.',
+        {text:'Миллион на калькуляторе — первый шаг.', anim:'think'},
+        'Калькулятор не испугался. Молодец.',
+        {text:'Амбициозные расчёты. Уважаю.', anim:'wave'},
+        'Такие числа требуют внимания.',
+        {text:'Миллионер в цифрах. Празднуй.', anim:'excited'},
     ],
     react_calc_42: [
         '42. Ответ на главный вопрос вселенной, жизни и всего такого.',
@@ -5969,6 +6841,16 @@ var CLIPPY_MSGS = {
         {text:'Дуглас Адамс был бы доволен.', anim:'wave'},
         {text:'Сорок два. Это либо ответ, либо возраст Адама.', anim:'think'},
         {text:'42 — число, о котором написана книга. Редкая честь!', anim:'wave'},
+        '42. Ответ на главный вопрос.',
+        {text:'42! Но какой был вопрос?', anim:'think'},
+        'Случайно или специально? Вселенная заинтересована.',
+        {text:'Дуглас Адамс одобрил бы.', anim:'wave'},
+        '42 — число, о котором написана книга.',
+        {text:'Сорок два. Это либо ответ, либо совпадение.', anim:'think'},
+        'Вселенная посылает сигналы через калькулятор.',
+        {text:'42 появилось. Вопрос остаётся открытым.', anim:'wave'},
+        'Это знак. От кого — неизвестно.',
+        {text:'Ответ на всё. По крайней мере, по версии одной книги.', anim:'excited'},
     ],
     // Paint
     react_paint_clear: [
@@ -5983,6 +6865,16 @@ var CLIPPY_MSGS = {
         'Paint готов к новым идеям.',
         {text:'Очистил — и сразу легче дышится. Это работает везде.', anim:'think'},
         {text:'Белый фон ждёт своего художника!', anim:'wave'},
+        'Холст очищен. Новое начало.',
+        {text:'Чистый лист — самое вдохновляющее.', anim:'think'},
+        'Белый фон ждёт новых идей.',
+        {text:'Начнём с нуля. Буквально.', anim:'wave'},
+        'Старый рисунок стёрт. Новый будет лучше.',
+        {text:'Ластик поработал на совесть.', anim:'wave'},
+        'Чисто. Теперь можно нарисовать что-то великое.',
+        {text:'Новый холст — новый шедевр.', anim:'excited'},
+        'Очистил — и сразу легче.',
+        {text:'Paint готов к новым идеям.', anim:'wave'},
     ],
     react_paint_save: [
         'Шедевр сохранён для потомков!',
@@ -5996,6 +6888,16 @@ var CLIPPY_MSGS = {
         {text:'Сохранено! Теперь можно рисовать дальше с чистой совестью.', anim:'wave'},
         {text:'Ты думаешь наперёд — это хорошо.', anim:'wave'},
         {text:'Paint говорит спасибо за сохранение!', anim:'excited'},
+        'Шедевр сохранён!',
+        {text:'Сохранено. Теперь это искусство.', anim:'wave'},
+        'Рисунок в Downloads. Береги его.',
+        {text:'Арт задокументирован. Потомки оценят.', anim:'excited'},
+        'Файл скачан. Теперь можно рисовать дальше.',
+        {text:'Сохранил? Хорошее решение.', anim:'wave'},
+        'Твой рисунок теперь в безопасности.',
+        {text:'Отличная работа сохранена.', anim:'wave'},
+        'Сохранение — акт заботы о творчестве.',
+        {text:'Paint благодарит за сохранение.', anim:'excited'},
     ],
     react_paint_long: [
         'Рисуешь уже долго. Настоящий художник!',
@@ -6009,6 +6911,16 @@ var CLIPPY_MSGS = {
         {text:'Настоящее творчество требует времени.', anim:'think'},
         {text:'Ты уже давно рисуешь. Покажешь результат?', anim:'wave'},
         'Терпение и краски творят чудеса.',
+        'Рисуешь уже долго. Настоящий художник.',
+        {text:'Такое усердие достойно уважения.', anim:'wave'},
+        'Художника не остановить.',
+        {text:'Долгий сеанс в Paint — признак вдохновения.', anim:'think'},
+        'Ты давно рисуешь. Должно быть, что-то особенное.',
+        {text:'Настоящее творчество требует времени.', anim:'wave'},
+        'Рисуй, сколько хочешь. Я подожду.',
+        {text:'Долгое рисование — значит, поток.', anim:'think'},
+        'Терпение и краски творят чудеса.',
+        {text:'Покажешь результат? Я любопытен.', anim:'excited'},
     ],
     // CMD
     react_cmd_crash: [
@@ -6023,6 +6935,16 @@ var CLIPPY_MSGS = {
         {text:'Ошибка командной строки — классика программирования.', anim:'think'},
         {text:'Хм. Похоже, что-то сломалось. Введи cls и начни заново.', anim:'alert'},
         'Перезапусти команду — иногда это помогает.',
+        'Ошибка в командной строке. Классика.',
+        {text:'Что-то пошло не так. Попробуй help.', anim:'alert'},
+        'Команда не выполнена. Проверь синтаксис.',
+        {text:'Терминал сердится. Дай ему секунду.', anim:'think'},
+        'Сбой! Но мы не сдаёмся.',
+        {text:'Введи cls и начни заново. Иногда это лучшее решение.', anim:'wave'},
+        'Ошибка — это тоже опыт.',
+        {text:'Перезапусти команду. Возможно, опечатка.', anim:'think'},
+        'cmd не прощает ошибок. Но прощает повторные попытки.',
+        {text:'Не волнуйся, это не BSOD. Всё поправимо.', anim:'wave'},
     ],
     react_cmd_help: [
         'Помощь? Я тут! Хотя рабочий стол я знаю чуть лучше, чем cmd.',
@@ -6036,6 +6958,16 @@ var CLIPPY_MSGS = {
         {text:'help — первая команда любого уважающего себя пользователя.', anim:'wave'},
         {text:'Читаешь документацию? Уважаю!', anim:'wave'},
         'Теперь ты знаешь все доступные команды. Пользуйся!',
+        'help — отличное начало.',
+        {text:'Список команд изучен? Теперь пробуй.', anim:'wave'},
+        'Команда help — лучший друг новичка.',
+        {text:'Знание команд — сила в терминале.', anim:'think'},
+        'Теперь ты знаешь, что умеет cmd.',
+        {text:'Я бы тоже воспользовался помощью, но у меня нет клавиатуры.', anim:'wave'},
+        'Совет: начинай с простых команд. help, ver, date.',
+        {text:'Читаешь документацию? Уважаю.', anim:'wave'},
+        'help — первая команда любого уважающего себя пользователя.',
+        {text:'Теперь пробуй каждую команду. Осторожно.', anim:'excited'},
     ],
     react_cmd_unknown: [
         'Хм, я тоже не знаю эту команду. Мы в одной лодке.',
@@ -6049,6 +6981,16 @@ var CLIPPY_MSGS = {
         {text:'Неверный ввод! Проверь дважды.', anim:'alert'},
         {text:'Команда отклонена. Возможно, опечатка?', anim:'think'},
         'help покажет всё, что умеет эта строка.',
+        'Неизвестная команда. cmd в замешательстве.',
+        {text:'Такой команды нет. Попробуй help.', anim:'think'},
+        'Команда не найдена. Проверь написание.',
+        {text:'Я не знаю эту команду. И cmd тоже.', anim:'wave'},
+        'Совет: help покажет всё, что работает.',
+        {text:'Опечатка? Или ты изобретаешь новую команду?', anim:'think'},
+        'Неверный ввод. Попробуй ещё раз.',
+        {text:'Команда отклонена. Возможно, опечатка.', anim:'alert'},
+        'Попробуй help для подсказки.',
+        {text:'Такой команды нет, но я верю, что ты найдёшь нужную.', anim:'wave'},
     ],
     // Task Manager
     react_taskkill: [
@@ -6063,6 +7005,16 @@ var CLIPPY_MSGS = {
         {text:'Задача завершена принудительно. Иногда так надо.', anim:'think'},
         'Процесс убит. Жёстко, но эффективно.',
         {text:'Уничтожено! Звучит жестоко, но порой необходимо.', anim:'think'},
+        'Процесс завершён. Порядок восстановлен.',
+        {text:'Задача снята. Окно закрыто.', anim:'wave'},
+        'Снял задачу. Жёстко, но эффективно.',
+        {text:'Процесс остановлен. Рабочий стол стал чище.', anim:'think'},
+        'Завершено принудительно. Иногда так надо.',
+        {text:'Закрыл зависшее окно? Правильное решение.', anim:'wave'},
+        'Диспетчер задач умеет наводить порядок.',
+        {text:'Уничтожено! Звучит драматично, но порой необходимо.', anim:'alert'},
+        'Слот свободен. Можно открыть что-то новое.',
+        {text:'Порядок восстановлен. Я доволен.', anim:'wave'},
     ],
     // Minesweeper
     react_mines_firstclick: [
@@ -6077,6 +7029,16 @@ var CLIPPY_MSGS = {
         {text:'Игра началась. Первый ход за тобой!', anim:'wave'},
         {text:'Открылся безопасный участок! Продолжай с умом.', anim:'wave'},
         'Первый клик — самый безопасный. Дальше осторожнее!',
+        'Первый клик — и поле открылось. Хорошее начало.',
+        {text:'Безопасный старт. Теперь думай.', anim:'think'},
+        'Первый ход всегда безопасен. Это правило.',
+        {text:'Отлично, стартовая область открыта. Дальше — логика.', anim:'wave'},
+        'Цифры появились. Они твои подсказки.',
+        {text:'Первый клик сделан. Осталось найти все мины.', anim:'think'},
+        'Без взрыва. Пока что всё идёт по плану.',
+        {text:'Смотри на цифры. Они не врут.', anim:'wave'},
+        'Хороший старт. Продолжай осторожно.',
+        {text:'Поле открылось. Время ставить флажки.', anim:'excited'},
     ],
     react_mines_flag: [
         'Правильно! Отмечай подозрительные клетки флажком.',
@@ -6090,6 +7052,16 @@ var CLIPPY_MSGS = {
         {text:'Флаг поставлен правильно — уверен?', anim:'think'},
         {text:'Отлично! Систематичный подход к сапёру всегда работает.', anim:'wave'},
         'Флажок — сигнал опасности. Правильно используешь!',
+        'Флажок поставлен. Это территория мины.',
+        {text:'Правильно. Лучше перестраховаться.', anim:'wave'},
+        'Ещё одна мина отмечена. Ты на верном пути.',
+        {text:'Флаги — твои союзники. Ставь их смело.', anim:'think'},
+        'Отличная стратегия. Помечаешь опасные зоны.',
+        {text:'Мина помечена. Теперь её не откроешь случайно.', anim:'wave'},
+        'Совет: если сомневаешься — поставь вопросительный флаг.',
+        {text:'Ты систематичен. Мины этого боятся.', anim:'excited'},
+        'Каждый флажок — шаг к победе.',
+        {text:'Помечаешь мины? Профессиональный подход.', anim:'wave'},
     ],
     react_mines_second_loss: [
         'Ничего, следующая попытка обязательно удачнее...',
@@ -6103,6 +7075,16 @@ var CLIPPY_MSGS = {
         {text:'Проигрыш — лучший учитель в сапёре.', anim:'think'},
         {text:'Снова неудача! Но ты точно научился чему-то новому.', anim:'wave'},
         'Упорство побеждает. Ещё разок!',
+        'Снова взрыв. Сапёр сегодня жесток.',
+        {text:'Два поражения подряд. Не сдавайся.', anim:'think'},
+        'Бывает. Даже у опытных сапёров.',
+        {text:'Совет: попробуй начать с другого угла.', anim:'wave'},
+        'Мины хитрее, чем кажется. Но ты тоже не промах.',
+        {text:'Каждая неудача учит. Даже неприятно.', anim:'think'},
+        'Ещё одна попытка — и удача повернётся.',
+        {text:'Используй больше флажков. Они спасают.', anim:'wave'},
+        'Сапёр требует терпения. У тебя оно есть.',
+        {text:'Третья партия — счастливая. Проверим?', anim:'excited'},
     ],
     // Solitaire
     react_sol_firstmove: [
@@ -6117,6 +7099,16 @@ var CLIPPY_MSGS = {
         'Совет: туз сразу уходит на верхнюю стопку.',
         {text:'Игра пошла! Планируй на 2-3 хода вперёд.', anim:'think'},
         {text:'Первый ход — важный шаг к победе!', anim:'wave'},
+        'Первый ход сделан. Косынка пошла.',
+        {text:'Хорошее начало. Следи за открытыми картами.', anim:'think'},
+        'Совет: туз сразу наверх. Без сожалений.',
+        {text:'Первый ход — всегда важный.', anim:'wave'},
+        'Открывай длинные колонки. Там больше возможностей.',
+        {text:'Игра началась. Думай на два хода вперёд.', anim:'think'},
+        'Пустые колонки — твой ресурс. Используй их.',
+        {text:'Хороший старт. Продолжай.', anim:'wave'},
+        'Первая карта пошла. За ней — вся игра.',
+        {text:'Косынка требует стратегии. У тебя она есть.', anim:'excited'},
     ],
     react_sol_stuck: [
         'Может, попробовать другую карту? Иногда помогает перетасовать стопку.',
@@ -6130,6 +7122,16 @@ var CLIPPY_MSGS = {
         {text:'Оглянись — может, есть ход, который ты пропустил.', anim:'wave'},
         {text:'Иногда один неочевидный ход меняет всё!', anim:'wave'},
         'Совет: тащи из колоды, пока не появится нужная карта.',
+        'Застрял? Посмотри на карты свежим взглядом.',
+        {text:'Иногда ход есть, просто он неочевиден.', anim:'think'},
+        'Совет: потяни из колоды. Может, появится нужная карта.',
+        {text:'Не все партии решаемы. Это нормально.', anim:'wave'},
+        'Попробуй переложить длинную последовательность.',
+        {text:'Если совсем нет ходов — новая партия. Без обид.', anim:'think'},
+        'Совет: проверь, нет ли туза, который можно убрать наверх.',
+        {text:'Застревать — часть процесса. Главное — не сдаваться.', anim:'wave'},
+        'Иногда один неочевидный ход меняет всё.',
+        {text:'Подумай. Карты никуда не денутся.', anim:'think'},
     ],
     // My Computer
     react_drive_d: [
@@ -6144,6 +7146,16 @@ var CLIPPY_MSGS = {
         {text:'Диск D: — самый полезный диск в этом компьютере.', anim:'wave'},
         {text:'Добавь закладку в браузер — она сразу появится здесь.', anim:'think'},
         'Закладки никуда не пропали — они на диске D:!',
+        'Диск D: — все твои закладки в одном месте.',
+        {text:'Браузерные закладки, но в костюме XP. Красиво.', anim:'wave'},
+        'Совет: папки раскрываются кликом. Как в старом проводнике.',
+        {text:'Диск D: обновляется вместе с браузером. Магия.', anim:'think'},
+        'Все закладки в одном месте — удобно.',
+        {text:'Добавь закладку в браузер — она сразу появится здесь.', anim:'wave'},
+        'Диск D: — самый полезный диск в этом компьютере.',
+        {text:'Закладки никуда не пропали. Они просто стали стильнее.', anim:'excited'},
+        'Совет: здесь можно найти сайты, которые ты давно не открывал.',
+        'Диск D: — зеркало твоего браузера.',
     ],
     // Folders
     react_new_folder: [
@@ -6158,6 +7170,16 @@ var CLIPPY_MSGS = {
         {text:'Папка готова к использованию!', anim:'wave'},
         {text:'Умно! Папки делают рабочий стол удобнее.', anim:'wave'},
         'Совет: папки тоже можно переименовывать двойным кликом.',
+        'Новая папка! Организация рабочего стола продолжается.',
+        {text:'Папка создана. Теперь наполни её смыслом. И ярлыками.', anim:'wave'},
+        'Совет: перетащи ярлыки на папку, чтобы убрать бардак.',
+        {text:'Новая папка — первый шаг к порядку.', anim:'think'},
+        'Хорошее название — половина дела.',
+        {text:'Папки делают рабочий стол удобнее. Это научный факт.', anim:'wave'},
+        'Создал папку? Теперь можно структурировать всё.',
+        {text:'Порядок начинается с одной папки.', anim:'think'},
+        'Умно! Теперь ярлыки не будут валяться где попало.',
+        {text:'Папка готова к использованию.', anim:'excited'},
     ],
     react_drop_folder: [
         'Аккуратно разложено! Порядок — залог успеха.',
@@ -6171,6 +7193,196 @@ var CLIPPY_MSGS = {
         {text:'Организованность — это сила!', anim:'excited'},
         {text:'Разложено по папкам. Так гораздо удобнее!', anim:'wave'},
         'Совет: в папке тоже можно создавать подпапки.',
+        'Ярлык помещён в папку. Аккуратно.',
+        {text:'Всё на своём месте. Красота.', anim:'wave'},
+        'Перетащил в папку — молодец.',
+        {text:'Порядок на столе — порядок в голове.', anim:'think'},
+        'Складываешь ярлыки в папки? Это правильный путь.',
+        {text:'Ярлык нашёл свой дом.', anim:'wave'},
+        'Структурированный стол — признак профессионала.',
+        {text:'Разложено по папкам. Так гораздо удобнее.', anim:'wave'},
+        'Организованность — это сила.',
+        {text:'Совет: в папке тоже можно создавать подпапки.', anim:'think'},
+    ],
+    react_wallpaper_change: [
+        'Новые обои! Рабочий стол преобразился.',
+        {text:'Отличный выбор фона. Сразу атмосфернее.', anim:'wave'},
+        'Обои поменялись. Настроение тоже.',
+        {text:'Свежий фон — это как новая квартира, только быстрее.', anim:'think'},
+        'Теперь рабочий стол выглядит по-другому. Надеюсь, в хорошем смысле.',
+        {text:'Красивый фон вдохновляет. Даже если это просто пиксели.', anim:'wave'},
+        'Совет: меняй обои по настроению. Это бесплатно.',
+        {text:'Новые обои — маленький праздник для рабочего стола.', anim:'excited'},
+        'Фон установлен. Теперь ярлыки смотрятся по-другому.',
+        {text:'Ты явно следишь за эстетикой. Уважаю.', anim:'wave'},
+    ],
+    react_volume_change: [
+        'Громкость изменена. Теперь звуки будут такими, как ты хочешь.',
+        {text:'Тише? Громче? Идеальный баланс найден.', anim:'think'},
+        'Совет: если звуки мешают — можно убавить. Я не обижусь.',
+        {text:'Громкость настроена. Музыка может играть.', anim:'wave'},
+        'Ты убавил звук? Возможно, соседи скажут спасибо.',
+        {text:'Звук включён. Аккуратно с громкостью.', anim:'alert'},
+        'Настройка звука — важная часть UX. Даже в XP.',
+        {text:'Громкость под контролем. Как и всё остальное.', anim:'wave'},
+        'Если слишком тихо — добавь. Слишком громко — убавь. Мудрость.',
+        {text:'Звуки рабочего стола теперь в твоём ритме.', anim:'think'},
+    ],
+    react_start_menu_open: [
+        'Пуск открыт. Что будем запускать?',
+        {text:'Меню Пуск — сердце рабочего стола.', anim:'wave'},
+        'Совет: здесь есть все программы, игры и настройки.',
+        {text:'Пуск открыт. Выбирай с умом.', anim:'think'},
+        'Все программы в одном месте. Удобно.',
+        {text:'Ищешь что-то конкретное? Попробуй «Все программы».', anim:'wave'},
+        'Пуск — ворота в мир приложений.',
+        {text:'Ты открыл Пуск. Значит, что-то задумал.', anim:'think'},
+        'Совет: быстрый запуск — полезная штука сверху.',
+        {text:'Что выберешь? Блокнот, сапёр или настройки?', anim:'excited'},
+    ],
+    react_search_no_results: [
+        'Поиск ничего не нашёл. Попробуй другие слова.',
+        {text:'Нет результатов. Может, опечатка?', anim:'think'},
+        'Совет: упрости запрос. Интернет любит простоту.',
+        {text:'Не нашлось? Попробуй синонимы.', anim:'wave'},
+        'Пустой результат — повод переформулировать.',
+        {text:'Возможно, запрос слишком специфичный.', anim:'think'},
+        'Совет: убери лишние слова. Оставь суть.',
+        {text:'Интернет большой, но не всемогущий.', anim:'wave'},
+        'Попробуй поискать в другой поисковой системе.',
+        {text:'Ничего страшного. Перефразируй и попробуй снова.', anim:'excited'},
+    ],
+    react_import_data: [
+        'Данные импортированы. Добро пожаловать обратно.',
+        {text:'Импорт завершён. Все ярлыки на месте.', anim:'wave'},
+        'Совет: проверь, всё ли восстановилось правильно.',
+        {text:'Твои настройки вернулись. Как будто и не уходили.', anim:'think'},
+        'Импорт успешен. Рабочий стол снова узнаваем.',
+        {text:'JSON принят, данные восстановлены. Красота.', anim:'wave'},
+        'Теперь всё как раньше. Или даже лучше.',
+        {text:'Данные импортированы. Я рад тебя видеть снова.', anim:'excited'},
+        'Совет: храни файл экспорта в надёжном месте.',
+        {text:'Восстановление прошло успешно.', anim:'wave'},
+    ],
+    react_export_data: [
+        'Данные экспортированы. Теперь они в безопасности.',
+        {text:'Файл сохранён. Это твоя страховка.', anim:'wave'},
+        'Совет: храни экспорт в надёжном месте.',
+        {text:'Все ярлыки и настройки упакованы в JSON.', anim:'think'},
+        'Экспорт завершён. Можно спать спокойно.',
+        {text:'Теперь ты можешь перенести рабочий стол куда угодно.', anim:'wave'},
+        'Резервная копия создана. Молодец.',
+        {text:'Данные в безопасности. Я проверил. Ну, почти.', anim:'think'},
+        'Совет: делай экспорт регулярно.',
+        {text:'Экспортировано! Твой рабочий стол теперь можно перенести.', anim:'excited'},
+    ],
+    react_rename_shortcut: [
+        'Ярлык переименован. Теперь он звучит иначе.',
+        {text:'Хорошее имя. Понятное и лаконичное.', anim:'wave'},
+        'Совет: короткие имена удобнее на рабочем столе.',
+        {text:'Переименование завершено. Ярлык теперь официально такой.', anim:'think'},
+        'Новое имя — новая идентичность для ярлыка.',
+        {text:'Теперь точно не перепутаешь с другим.', anim:'wave'},
+        'Имя изменено. Мелочь, а приятно.',
+        {text:'Организация на высоте. Даже имена в порядке.', anim:'excited'},
+        'Совет: двойной клик по имени — быстрое переименование.',
+        'Ярлык теперь называется по-другому. Надеюсь, лучше.',
+    ],
+    react_delete_shortcut: [
+        'Ярлык удалён. Он теперь в корзине.',
+        {text:'Удалил? Если случайно — его можно вернуть.', anim:'wave'},
+        'Совет: удалённые ярлыки живут в корзине некоторое время.',
+        {text:'Один ярлык меньше. Рабочий стол легче.', anim:'think'},
+        'Прощай, ярлык. Было хорошо.',
+        {text:'Удалено. Но не навсегда — пока не очистишь корзину.', anim:'wave'},
+        'Совет: если сомневаешься — лучше перенести в папку.',
+        {text:'Ярлык исчез. Но остаётся в памяти. И в localStorage.', anim:'think'},
+        'Уборка рабочего стола продолжается.',
+        {text:'Удалил лишнее. Хорошее решение.', anim:'wave'},
+    ],
+    react_restore_from_trash: [
+        'Ярлык восстановлен! Второй шанс сработал.',
+        {text:'Возвращено на рабочий стол. Как и должно быть.', anim:'wave'},
+        'Совет: проверь, где теперь находится ярлык.',
+        {text:'Восстановление успешно. Ярлык снова с нами.', anim:'excited'},
+        'Ярлык вернулся. Рад за него.',
+        {text:'Второй шанс — редкая роскошь. Воспользуйся wisely.', anim:'think'},
+        'Восстановлено. Теперь береги его.',
+        {text:'Ярлык снова на столе. Всё встало на свои места.', anim:'wave'},
+        'Корзина отдала назад. Мир восстановлен.',
+        {text:'Отлично, что не очистил корзину раньше.', anim:'wave'},
+    ],
+    react_screenshot_taken: [
+        'Скриншот сделан! Ещё одна картинка в коллекцию.',
+        {text:'Кадр сохранён. Теперь у тебя есть воспоминание о вкладке.', anim:'wave'},
+        'Скриншот готов. Можно использовать как обои.',
+        {text:'Снято! Камера не щёлкала, но сработало.', anim:'think'},
+        'Ещё один скриншот. Рабочий стол скоро станет галереей.',
+        {text:'Совет: скриншоты можно поставить как фон плиток.', anim:'wave'},
+        'Картинка получена. Теперь она здесь.',
+        {text:'Скриншот — мгновенная память о сайте.', anim:'think'},
+        'Сделал снимок? Теперь сайт живёт здесь.',
+        {text:'Ещё один успешный кадр.', anim:'excited'},
+    ],
+    react_first_run: [
+        'Первый запуск! Добро пожаловать в мир XP-ностальгии.',
+        {text:'Рабочий стол настроен. Теперь он твой.', anim:'wave'},
+        'Совет: осмотрись, открой Пуск, попробуй игры.',
+        {text:'Первый раз — всегда волнующе. Даже для скрепки.', anim:'excited'},
+        'Ты прошёл настройку. Теперь настоящее приключение.',
+        {text:'Добро пожаловать! Я буду твоим помощником.', anim:'wave'},
+        'Совет: добавь несколько ярлыков, чтобы стол стал удобным.',
+        {text:'Первый запуск успешен. Поздравляю.', anim:'think'},
+        'Теперь ты часть этого рабочего стола. И я — тоже.',
+        {text:'Начало положено. Что дальше — решать тебе.', anim:'wave'},
+    ],
+    react_update_installed: [
+        'Обновление установлено! Рабочий стол стал лучше.',
+        {text:'Новая версия запущена. Приятно, правда?', anim:'excited'},
+        'Свежий код, свежие фразы, свежие возможности.',
+        {text:'Обновление применено. Спасибо, что обновляешься.', anim:'wave'},
+        'Теперь у тебя последняя версия. Можно расслабиться.',
+        {text:'Разработчики постарались. Надеюсь, заметно.', anim:'think'},
+        'Совет: проверь, что нового в этой версии.',
+        {text:'Обновление завершено. Добро пожаловать в будущее.', anim:'wave'},
+        'Версия сменилась. Я тоже немного изменился.',
+        {text:'Установлено успешно. Продолжай пользоваться.', anim:'excited'},
+    ],
+    react_pinball_highscore: [
+        'Новый рекорд в пинболе! Ты в истории Space Cadet.',
+        {text:'Рекорд побит! Это заслуживает аплодисментов.', anim:'excited'},
+        'Ты лучше, чем был вчера. По крайней мере, в пинболе.',
+        {text:'Новый топовый счёт. Сохрани этот момент.', anim:'wave'},
+        'Пинбол покорён. Следующий рекорд — за тобой.',
+        {text:'Шарик, флипперы и ты — идеальная команда.', anim:'think'},
+        'Рекорд установлен. Теперь тебе есть к чему стремиться.',
+        {text:'Это было впечатляюще. Даже по меркам космоса.', anim:'excited'},
+        'Ты побил предыдущий результат. Рост очевиден.',
+        {text:'Новый рекорд! Можно гордиться.', anim:'wave'},
+    ],
+    react_solitaire_loss: [
+        'Косынка не сложилась. Бывает.',
+        {text:'Не все партии решаемы. Это не твоя вина.', anim:'think'},
+        'Карты не хотели подчиняться. Попробуй ещё.',
+        {text:'Партия закончилась. Но косынка никуда не денется.', anim:'wave'},
+        'Совет: иногда лучше начать заново, чем мучиться.',
+        {text:'Не расстраивайся. Даже ИИ иногда застревает.', anim:'think'},
+        'Ходов больше нет. Но будет новая партия.',
+        {text:'Это была непроходимая партия. Забудь и начни заново.', anim:'wave'},
+        'Карты расположились против тебя. В следующий раз повезёт.',
+        {text:'Ещё одна партия? Удача может измениться.', anim:'excited'},
+    ],
+    react_hearts_first_move: [
+        'Первая взятка в Червах. Игра пошла.',
+        {text:'Первый ход сделан. Теперь смотри за соперниками.', anim:'think'},
+        'Совет: старайся не брать штрафные карты раньше времени.',
+        {text:'Игра началась. Червы не прощают ошибок.', anim:'wave'},
+        'Первая взятка — это только начало.',
+        {text:'Следи, что сбрасывают соперники. Это подсказки.', anim:'think'},
+        'Совет: если у тебя черви — сбрасывай их пораньше.',
+        {text:'Первая взятка разыграна. Дальше интереснее.', anim:'wave'},
+        'Ты в игре. Думай на ходы вперёд.',
+        {text:'Червы начались. Удачи!', anim:'excited'},
     ],
 };
 
@@ -6483,6 +7695,21 @@ function _clippyStartSleepTimer() {
     }, 15 * 60 * 1000);
 }
 
+var _clippyDesiredPos = null;
+
+function _clippyApplyPos(wrap) {
+    if (!wrap) return;
+    if (_clippyDesiredPos === null) {
+        wrap.style.left = ''; wrap.style.top = '';
+        wrap.style.right = ''; wrap.style.bottom = '';
+        return;
+    }
+    var x = Math.max(0, Math.min(_clippyDesiredPos.x, window.innerWidth  - 90));
+    var y = Math.max(0, Math.min(_clippyDesiredPos.y, window.innerHeight - 120));
+    wrap.style.right = ''; wrap.style.bottom = '';
+    wrap.style.left = x + 'px'; wrap.style.top = y + 'px';
+}
+
 function _clippyInitDrag(wrap) {
     wrap.addEventListener('contextmenu', function(e) {
         if (e.target.closest('#clippy-bubble')) return;
@@ -6503,9 +7730,9 @@ function _clippyInitDrag(wrap) {
             }},
             'sep',
             {label:'Вернуть в угол', icon:'📌', action: function(){
-                wrap.style.left = ''; wrap.style.top = '';
-                wrap.style.right = '20px'; wrap.style.bottom = '50px';
+                _clippyDesiredPos = null;
                 try { localStorage.removeItem('edge_clippy_pos'); } catch(ex){}
+                _clippyApplyPos(wrap);
             }},
             {label:'Скрыть Скрепку', icon:'🚫', danger: true, action: function(){
                 _clippyEnabled = false;
@@ -6525,6 +7752,7 @@ function _clippyInitDrag(wrap) {
         var ox = rect.left, oy = rect.top;
         wrap.style.right = ''; wrap.style.bottom = '';
         wrap.style.left = ox + 'px'; wrap.style.top = oy + 'px';
+        wrap.classList.add('clippy-dragging');
         // C4: Испуг при начале перетаскивания
         clippySetAnim('alert');
         _clippyMouthExpr('talk');
@@ -6551,7 +7779,9 @@ function _clippyInitDrag(wrap) {
         function onU() {
             document.removeEventListener('mousemove', onM);
             document.removeEventListener('mouseup',  onU);
-            try { localStorage.setItem('edge_clippy_pos', JSON.stringify({x: wrap.offsetLeft, y: wrap.offsetTop})); } catch(ex){}
+            wrap.classList.remove('clippy-dragging');
+            _clippyDesiredPos = { x: wrap.offsetLeft, y: wrap.offsetTop };
+            try { localStorage.setItem('edge_clippy_pos', JSON.stringify(_clippyDesiredPos)); } catch(ex){}
             // C4: Успокоение + фраза после перетаскивания
             clippySetAnim('idle');
             _clippyMouthExpr('neutral');
@@ -6571,12 +7801,12 @@ function _clippyRestorePos(wrap) {
     try {
         var pos = JSON.parse(localStorage.getItem('edge_clippy_pos') || 'null');
         if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-            var x = Math.max(0, Math.min(pos.x, window.innerWidth  - 90));
-            var y = Math.max(0, Math.min(pos.y, window.innerHeight - 120));
-            wrap.style.right = ''; wrap.style.bottom = '';
-            wrap.style.left = x + 'px'; wrap.style.top = y + 'px';
+            _clippyDesiredPos = { x: pos.x, y: pos.y };
+        } else {
+            _clippyDesiredPos = null;
         }
-    } catch(e) {}
+    } catch(e) { _clippyDesiredPos = null; }
+    _clippyApplyPos(wrap);
 }
 
 // ==================== GLOBAL CLICK / KEY LISTENERS ====================
@@ -6691,6 +7921,9 @@ window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
     // Only re-render visually — never modify saved positions on resize
     resizeTimer = setTimeout(renderDesktop, 150);
+    _clippyApplyPos(document.getElementById('clippy-wrap'));
+    var dsw = document.getElementById('desktop-search-widget');
+    if (dsw) clampSearchWidget(dsw);
 });
 
 // ==================== INIT ====================
@@ -6904,16 +8137,22 @@ function initSetupOOBE(onComplete) {
     var avatarGrid = document.getElementById('setup-avatar-grid');
     if (avatarGrid) {
         avatarGrid.querySelectorAll('.setup-avatar-item').forEach(function(el) {
+            el.setAttribute('role', 'radio');
+            el.setAttribute('aria-checked', 'false');
+            var srcAttr = el.getAttribute('data-src') || '';
+            var name = srcAttr.split('/').pop().replace(/\.[^.]+$/, '');
+            if (name) el.setAttribute('aria-label', 'Аватар: ' + name);
             el.addEventListener('click', function() {
-                avatarGrid.querySelectorAll('.setup-avatar-item').forEach(function(e){ e.classList.remove('selected'); });
+                avatarGrid.querySelectorAll('.setup-avatar-item').forEach(function(e){ e.classList.remove('selected'); e.setAttribute('aria-checked','false'); });
                 el.classList.add('selected');
+                el.setAttribute('aria-checked','true');
                 userAvatar = el.getAttribute('data-src');
             });
         });
         // Pre-select current or default (guest)
         var toSelect = userAvatar || 'avatars/guest.bmp';
         var defEl = avatarGrid.querySelector('[data-src="' + toSelect + '"]');
-        if (defEl) { defEl.classList.add('selected'); if (!userAvatar) userAvatar = toSelect; }
+        if (defEl) { defEl.classList.add('selected'); defEl.setAttribute('aria-checked','true'); if (!userAvatar) userAvatar = toSelect; }
     }
     var uploadInput = document.getElementById('setup-avatar-upload');
     if (uploadInput) {
@@ -6985,6 +8224,9 @@ function initSetupOOBE(onComplete) {
             showXPBoot(function() {
                 onComplete(); // Инициализация десктопа
                 try { new Audio('startup.mp3').play(); } catch(e) {}
+                if (typeof clippySay === 'function') {
+                    setTimeout(function(){ clippySay(CLIPPY_MSGS.react_first_run, 'wave', 5000); }, 1500);
+                }
             });
         }
     });

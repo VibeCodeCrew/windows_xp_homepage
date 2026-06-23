@@ -1,4 +1,4 @@
-сchrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'capture_screenshot') {
         captureTab(message.url, sendResponse);
         return true;
@@ -7,7 +7,28 @@
         fetchPageTitle(message.url, sendResponse);
         return true;
     }
+    if (message.action === 'fetch_suggestions') {
+        fetchSuggestions(message.engine, message.q, sendResponse);
+        return true;
+    }
 });
+
+async function fetchSuggestions(engine, q, sendResponse) {
+    try {
+        const query = (q || '').trim();
+        if (!query) { sendResponse({ success: true, items: [] }); return; }
+        const url = engine === 'go'
+            ? 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query)
+            : 'https://suggest.yandex.ru/suggest-ff.cgi?part=' + encodeURIComponent(query);
+        const resp = await fetch(url);
+        if (!resp.ok) { sendResponse({ success: false }); return; }
+        const data = await resp.json();
+        const items = Array.isArray(data) && Array.isArray(data[1]) ? data[1].slice(0, 8) : [];
+        sendResponse({ success: true, items });
+    } catch (e) {
+        sendResponse({ success: false });
+    }
+}
 
 async function fetchPageTitle(url, sendResponse) {
     try {
