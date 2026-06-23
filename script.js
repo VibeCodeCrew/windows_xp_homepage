@@ -3734,26 +3734,92 @@ function openNotepad() {
 function openCalculator() {
     if (wmWindows['calculator']) { wmRestore('calculator'); wmFocus('calculator'); return; }
     const c=document.createElement('div'); c.className='calc-window';
-    c.innerHTML='<div class="calc-display"><input type="text" id="calc-screen" value="0" readonly></div><div class="calc-buttons">'+
-        '<button class="calc-btn calc-fn" data-fn="mc">MC</button><button class="calc-btn calc-fn" data-fn="mr">MR</button><button class="calc-btn calc-fn" data-fn="ms">MS</button><button class="calc-btn calc-fn" data-fn="m+">M+</button>'+
-        '<button class="calc-btn calc-fn" data-fn="back">&#9003;</button><button class="calc-btn calc-fn" data-fn="ce">CE</button><button class="calc-btn calc-fn" data-fn="c">C</button><button class="calc-btn calc-op" data-op="/">&#247;</button>'+
-        '<button class="calc-btn" data-d="7">7</button><button class="calc-btn" data-d="8">8</button><button class="calc-btn" data-d="9">9</button><button class="calc-btn calc-op" data-op="*">&#215;</button>'+
-        '<button class="calc-btn" data-d="4">4</button><button class="calc-btn" data-d="5">5</button><button class="calc-btn" data-d="6">6</button><button class="calc-btn calc-op" data-op="-">&#8722;</button>'+
-        '<button class="calc-btn" data-d="1">1</button><button class="calc-btn" data-d="2">2</button><button class="calc-btn" data-d="3">3</button><button class="calc-btn calc-op" data-op="+" style="grid-row:span 2">+</button>'+
-        '<button class="calc-btn calc-wide" data-d="0">0</button><button class="calc-btn" data-fn="dot">.</button><button class="calc-btn calc-eq" data-fn="eq">=</button></div>';
-    // Compute exact content size so the window fits without scrollbars
-    const BTN_W = 44, BTN_H = 36, GAP = 3, PAD = 12, DISP_H = 44, GAP_DISP = 4;
-    const contentW = PAD + 4*BTN_W + 3*GAP + PAD;
-    const contentH = PAD + DISP_H + GAP_DISP + 5*BTN_H + 4*GAP + PAD;
-    wmCreate('calculator','Калькулятор',c,contentW,contentH,'\uD83D\uDD22');
-    setTimeout(function() { wmResizeToContent('calculator', contentW, contentH, 200, 160); }, 0);
+    let scientific = false;
+    const menuEdit = '<div class="calc-menu"><span class="calc-menu-label">Правка</span><div class="calc-menu-dropdown"><div class="calc-menu-item" data-cmd="copy">Копировать</div><div class="calc-menu-item" data-cmd="paste">Вставить</div></div></div>';
+    const menuView = '<div class="calc-menu"><span class="calc-menu-label">Вид</span><div class="calc-menu-dropdown"><div class="calc-menu-item" data-cmd="standard">Обычный</div><div class="calc-menu-item" data-cmd="scientific">Инженерный</div></div></div>';
+    const menuHelp = '<div class="calc-menu"><span class="calc-menu-label">Справка</span><div class="calc-menu-dropdown"><div class="calc-menu-item" data-cmd="about">О программе</div></div></div>';
+    const standardPad =
+        '<div class="calc-blank"></div><button class="calc-btn calc-fn" data-fn="back" style="grid-column:span 2">←</button><button class="calc-btn calc-fn" data-fn="ce">CE</button><button class="calc-btn calc-fn" data-fn="c">C</button><div class="calc-blank"></div>'+
+        '<button class="calc-btn calc-mem" data-fn="mc">MC</button><button class="calc-btn calc-num" data-d="7">7</button><button class="calc-btn calc-num" data-d="8">8</button><button class="calc-btn calc-num" data-d="9">9</button><button class="calc-btn calc-op" data-op="/">/</button><button class="calc-btn calc-op" data-fn="sqrt">√</button>'+
+        '<button class="calc-btn calc-mem" data-fn="mr">MR</button><button class="calc-btn calc-num" data-d="4">4</button><button class="calc-btn calc-num" data-d="5">5</button><button class="calc-btn calc-num" data-d="6">6</button><button class="calc-btn calc-op" data-op="*">*</button><button class="calc-btn calc-op" data-fn="pct">%</button>'+
+        '<button class="calc-btn calc-mem" data-fn="ms">MS</button><button class="calc-btn calc-num" data-d="1">1</button><button class="calc-btn calc-num" data-d="2">2</button><button class="calc-btn calc-num" data-d="3">3</button><button class="calc-btn calc-op" data-op="-">−</button><button class="calc-btn calc-op" data-fn="inv">1/x</button>'+
+        '<button class="calc-btn calc-mem" data-fn="m+">M+</button><button class="calc-btn calc-num" data-d="0">0</button><button class="calc-btn calc-op" data-fn="neg">+/-</button><button class="calc-btn calc-num" data-fn="dot">.</button><button class="calc-btn calc-op" data-op="+">+</button><button class="calc-btn calc-eq" data-fn="eq">=</button>';
+    const scientificPad =
+        '<button class="calc-btn calc-sci" data-fn="sin">sin</button><button class="calc-btn calc-sci" data-fn="cos">cos</button>'+
+        '<button class="calc-btn calc-sci" data-fn="tan">tan</button><button class="calc-btn calc-sci" data-fn="log">log</button>'+
+        '<button class="calc-btn calc-sci" data-fn="ln">ln</button><button class="calc-btn calc-sci" data-fn="sqr">x²</button>'+
+        '<button class="calc-btn calc-sci" data-fn="pi">π</button><button class="calc-btn calc-sci" data-fn="fact">n!</button>'+
+        '<button class="calc-btn calc-sci" data-fn="pow">x^y</button><div class="calc-blank"></div>';
+    c.innerHTML='<div class="calc-menubar">'+menuEdit+menuView+menuHelp+'</div>'+
+        '<div class="calc-display"><input type="text" id="calc-screen" value="0" readonly></div>'+
+        '<div class="calc-pad">'+
+        '<div class="calc-buttons calc-standard">'+standardPad+'</div>'+
+        '<div class="calc-buttons calc-scientific" style="display:none">'+scientificPad+'</div>'+
+        '</div>';
+
+    // Size constants
+    const STD_COLS = 6, SCI_COLS = 2, ROWS = 5;
+    const BTN_W = 36, BTN_H = 32, GAP = 4, PAD = 8, DISP_H = 40, MENU_H = 22, GAP_DISP = 6;
+    function stdContentW() { return PAD + STD_COLS*BTN_W + (STD_COLS-1)*GAP + PAD; }
+    function sciContentW() { return stdContentW() + GAP + SCI_COLS*BTN_W + (SCI_COLS-1)*GAP; }
+    const contentH = PAD + MENU_H + GAP_DISP + DISP_H + GAP_DISP + ROWS*BTN_H + (ROWS-1)*GAP + PAD;
+    wmCreate('calculator','Калькулятор',c,stdContentW(),contentH,'\uD83D\uDD22');
+    setTimeout(function() { wmResizeToContent('calculator', stdContentW(), contentH, 200, 200); }, 0);
+
     let cs={disp:'0',prev:null,op:null,waitOp:false,mem:0};
     function fmt(n){const s=String(parseFloat(n.toFixed(10)));return s.length>14?n.toExponential(6):s;}
-    function calc(a,b,op){if(op==='+')return a+b;if(op==='-')return a-b;if(op==='*')return a*b;if(op==='/')return b!==0?a/b:0;return b;}
+    function calc(a,b,op){if(op==='+')return a+b;if(op==='-')return a-b;if(op==='*')return a*b;if(op==='/')return b!==0?a/b:0;if(op==='pow')return Math.pow(a,b);return b;}
     function upd(){const s=document.getElementById('calc-screen');if(s)s.value=cs.disp;}
+    function fact(n){if(n<0||n!==Math.floor(n))return NaN;let r=1;for(let i=2;i<=n;i++)r*=i;return r;}
+    function doSci(fn){
+        let v=parseFloat(cs.disp);
+        switch(fn){
+            case 'sin':cs.disp=fmt(Math.sin(v*Math.PI/180));break;
+            case 'cos':cs.disp=fmt(Math.cos(v*Math.PI/180));break;
+            case 'tan':cs.disp=fmt(Math.tan(v*Math.PI/180));break;
+            case 'log':cs.disp=fmt(Math.log10(v));break;
+            case 'ln':cs.disp=fmt(Math.log(v));break;
+            case 'sqr':cs.disp=fmt(v*v);break;
+            case 'pi':cs.disp=fmt(Math.PI);cs.waitOp=true;break;
+            case 'fact':cs.disp=fmt(fact(v));break;
+        }
+    }
+    function setMode(isSci){
+        scientific=isSci;
+        const sciGrid=c.querySelector('.calc-scientific');
+        const stdGrid=c.querySelector('.calc-standard');
+        if(!sciGrid||!stdGrid)return;
+        sciGrid.style.display=isSci?'grid':'none';
+        const targetW=isSci?sciContentW():stdContentW();
+        wmResizeToContent('calculator', targetW, contentH, 200, 200);
+    }
+
     setTimeout(function(){
-        const cb=document.querySelector('#win-calculator .calc-buttons');if(!cb)return;
-        cb.addEventListener('click',function(e){
+        const win=document.getElementById('win-calculator'); if(!win)return;
+        // Menu handling
+        win.querySelectorAll('.calc-menu-label').forEach(function(lbl){
+            lbl.addEventListener('click',function(e){e.stopPropagation();
+                const wasActive=lbl.parentNode.classList.contains('active');
+                win.querySelectorAll('.calc-menu').forEach(function(m){m.classList.remove('active');});
+                if(!wasActive)lbl.parentNode.classList.add('active');
+            });
+        });
+        document.addEventListener('click',function(){win.querySelectorAll('.calc-menu').forEach(function(m){m.classList.remove('active');});});
+        win.querySelectorAll('.calc-menu-item').forEach(function(item){
+            item.addEventListener('click',function(e){e.stopPropagation();
+                const cmd=item.dataset.cmd;
+                if(cmd==='copy'){navigator.clipboard.writeText(cs.disp).catch(function(){});}
+                else if(cmd==='paste'){navigator.clipboard.readText().then(function(t){const n=parseFloat(t);if(!isNaN(n)){cs.disp=fmt(n);cs.waitOp=false;upd();}}).catch(function(){});}
+                else if(cmd==='standard'){setMode(false);}
+                else if(cmd==='scientific'){setMode(true);}
+                else if(cmd==='about'){alert('Калькулятор\nВерсия 1.0\nNostalgic Startpage');}
+                win.querySelectorAll('.calc-menu').forEach(function(m){m.classList.remove('active');});
+            });
+        });
+
+        // Button handling
+        const pad=c.querySelector('.calc-pad'); if(!pad)return;
+        pad.addEventListener('click',function(e){
             const btn=e.target.closest('.calc-btn');if(!btn)return;
             if(btn.dataset.d!==undefined){if(cs.waitOp){cs.disp=btn.dataset.d;cs.waitOp=false;}else cs.disp=cs.disp==='0'?btn.dataset.d:cs.disp+btn.dataset.d;if(cs.disp.length>14)cs.disp=cs.disp.slice(0,14);}
             else if(btn.dataset.op){const v=parseFloat(cs.disp);if(cs.op&&!cs.waitOp){const r=calc(cs.prev,v,cs.op);cs.disp=fmt(r);cs.prev=r;}else cs.prev=v;cs.op=btn.dataset.op;cs.waitOp=true;}
@@ -3766,7 +3832,7 @@ function openCalculator() {
         else if(_calcRes>=1000000){setTimeout(function(){clippySay(CLIPPY_MSGS.react_calc_million,'excited',5000);},100);}
         else if(_calcRes===42){setTimeout(function(){clippySay(CLIPPY_MSGS.react_calc_42,'wave',6000);},100);}
     }
-}break;case 'c':cs={disp:'0',prev:null,op:null,waitOp:false,mem:cs.mem};break;case 'ce':cs.disp='0';break;case 'back':cs.disp=cs.disp.length>1?cs.disp.slice(0,-1):'0';break;case 'ms':cs.mem=v;break;case 'mr':cs.disp=fmt(cs.mem);break;case 'mc':cs.mem=0;break;case 'm+':cs.mem+=v;break;}}
+}break;case 'c':cs={disp:'0',prev:null,op:null,waitOp:false,mem:cs.mem};break;case 'ce':cs.disp='0';break;case 'back':cs.disp=cs.disp.length>1?cs.disp.slice(0,-1):'0';break;case 'ms':cs.mem=v;break;case 'mr':cs.disp=fmt(cs.mem);break;case 'mc':cs.mem=0;break;case 'm+':cs.mem+=v;break;case 'sqrt':cs.disp=fmt(Math.sqrt(v));break;case 'pct':cs.disp=fmt(v/100);break;case 'inv':cs.disp=fmt(v!==0?1/v:0);break;case 'neg':cs.disp=fmt(-v);break;default:doSci(btn.dataset.fn);}}
             upd();
         });
     },0);
