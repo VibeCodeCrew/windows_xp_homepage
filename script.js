@@ -1949,6 +1949,32 @@ function wmCreate(id, title, contentEl, width, height, icon) {
     return win;
 }
 
+function wmGetChromeSize(winEl) {
+    const content = winEl.querySelector('.xp-win-content');
+    if (!content) return { w: 0, h: 0 };
+    return {
+        w: winEl.offsetWidth - content.clientWidth,
+        h: winEl.offsetHeight - content.clientHeight
+    };
+}
+
+function wmResizeToContent(id, contentW, contentH, minW, minH, maxW, maxH) {
+    const w = wmWindows[id];
+    if (!w) return;
+    const win = w.el;
+    const content = win.querySelector('.xp-win-content');
+    const chrome = wmGetChromeSize(win);
+    // If contentW/contentH is null, keep the current content dimension
+    let nw = (contentW != null ? contentW : content.clientWidth) + chrome.w;
+    let nh = (contentH != null ? contentH : content.clientHeight) + chrome.h;
+    if (minW != null) nw = Math.max(minW, nw);
+    if (minH != null) nh = Math.max(minH, nh);
+    if (maxW != null) nw = Math.min(maxW, nw);
+    if (maxH != null) nh = Math.min(maxH, nh);
+    win.style.width = Math.round(nw) + 'px';
+    win.style.height = Math.round(nh) + 'px';
+}
+
 function wmFocus(id) {
     if (!wmWindows[id]) return;
     Object.keys(wmWindows).forEach(function(k) { wmWindows[k].el.classList.add('inactive'); if (wmWindows[k].taskbarBtn) wmWindows[k].taskbarBtn.classList.remove('active'); });
@@ -3618,7 +3644,13 @@ function openSettings() {
     swLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
     swRow.appendChild(swChk); swRow.appendChild(swLbl); parP.appendChild(swRow);
 
-    wmCreate('settings', 'Свойства: Экран', c, 400, 340, '\u2699\uFE0F');
+    wmCreate('settings', 'Свойства: Экран', c, 460, 520, '\u2699\uFE0F');
+    setTimeout(function() {
+        const content = document.querySelector('#win-settings .xp-win-content');
+        if (content) {
+            wmResizeToContent('settings', content.scrollWidth, content.scrollHeight, 400, 340, 720, 650);
+        }
+    }, 0);
 }
 
 // ==================== RECYCLE BIN ====================
@@ -3709,7 +3741,12 @@ function openCalculator() {
         '<button class="calc-btn" data-d="4">4</button><button class="calc-btn" data-d="5">5</button><button class="calc-btn" data-d="6">6</button><button class="calc-btn calc-op" data-op="-">&#8722;</button>'+
         '<button class="calc-btn" data-d="1">1</button><button class="calc-btn" data-d="2">2</button><button class="calc-btn" data-d="3">3</button><button class="calc-btn calc-op" data-op="+" style="grid-row:span 2">+</button>'+
         '<button class="calc-btn calc-wide" data-d="0">0</button><button class="calc-btn" data-fn="dot">.</button><button class="calc-btn calc-eq" data-fn="eq">=</button></div>';
-    wmCreate('calculator','Калькулятор',c,260,300,'\uD83D\uDD22');
+    // Compute exact content size so the window fits without scrollbars
+    const BTN_W = 44, BTN_H = 36, GAP = 3, PAD = 12, DISP_H = 44, GAP_DISP = 4;
+    const contentW = PAD + 4*BTN_W + 3*GAP + PAD;
+    const contentH = PAD + DISP_H + GAP_DISP + 5*BTN_H + 4*GAP + PAD;
+    wmCreate('calculator','Калькулятор',c,contentW,contentH,'\uD83D\uDD22');
+    setTimeout(function() { wmResizeToContent('calculator', contentW, contentH, 200, 160); }, 0);
     let cs={disp:'0',prev:null,op:null,waitOp:false,mem:0};
     function fmt(n){const s=String(parseFloat(n.toFixed(10)));return s.length>14?n.toExponential(6):s;}
     function calc(a,b,op){if(op==='+')return a+b;if(op==='-')return a-b;if(op==='*')return a*b;if(op==='/')return b!==0?a/b:0;return b;}
@@ -4059,7 +4096,9 @@ function openPinball() {
             '<div class="pb-hud-item"><button id="pb-restart" class="xp-dialog-btn" style="padding:2px 6px; font-size:10px;">Рестарт</button></div>' +
             '<div class="pb-hud-item"><div class="pb-hud-lbl">МЯЧИ</div><div id="pb-balls">●●●</div></div>' +
         '</div>';
-    wmCreate('pinball', 'Space Cadet Pinball', c, 380, 590, '⚪');
+    // Size window to fit the virtual pinball table + HUD without internal scrollbars
+    const PB_VW = 320, PB_VH = 480;
+    wmCreate('pinball', 'Space Cadet Pinball', c, PB_VW + 40, PB_VH + 80, '⚪');
 
     setTimeout(function() {
         document.getElementById('pb-restart')?.addEventListener('click', function() {
@@ -4666,6 +4705,16 @@ function openPinball() {
             raf=requestAnimationFrame(loop);
         }
         resetBall();updateHUD();loop();
+
+        // Size window to fit the rendered pinball table + HUD without scrollbars
+        setTimeout(function() {
+            const hud = document.querySelector('#win-pinball .pinball-hud');
+            if (cv && hud) {
+                const desiredW = Math.max(PB_VW + 24, cv.width + 24);
+                const desiredH = cv.height + hud.offsetHeight + 16;
+                wmResizeToContent('pinball', desiredW, desiredH, 320, 420, 500, 800);
+            }
+        }, 0);
     }, 0);
 }
 
@@ -4675,7 +4724,12 @@ function openSolitaire() {
     const c = document.createElement('div');
     c.className = 'solitaire-window';
     c.innerHTML = '<div class="sol-toolbar"><button id="sol-new" class="xp-dialog-btn">Новая игра</button><span id="sol-score" style="margin-left:12px;font-size:11px;color:#333">Счёт: 0</span></div><div id="sol-area" class="sol-area"></div>';
-    wmCreate('solitaire', 'Косынка', c, 700, 520, '♠');
+    // Size the window to fit the full tableau (up to 13 cards in a column) without scrollbars
+    const CARD_W = 68, CARD_H = 96, COLS = 7, GAP = 8, PAD = 16, OVERLAP = 16, TOOLBAR_H = 30;
+    const contentW = PAD + COLS*CARD_W + (COLS-1)*GAP + PAD;
+    const maxTabH = CARD_H + (13-1)*OVERLAP;
+    const contentH = PAD + TOOLBAR_H + GAP + CARD_H + GAP + maxTabH + PAD;
+    wmCreate('solitaire', 'Косынка', c, contentW, contentH, '♠');
     setTimeout(function() { initSolitaire(); }, 0);
 }
 
@@ -5051,7 +5105,7 @@ function openHearts() {
     const c = document.createElement('div');
     c.className = 'hearts-window';
     c.innerHTML = '<div id="hearts-status" style="padding:6px 10px;font-size:11px;background:#c0d8c0;border-bottom:1px solid #8a8">Ваш ход. Разыграйте карту.</div><div id="hearts-table" class="hearts-table"></div><div id="hearts-hand" class="hearts-hand"></div><div style="padding:4px 8px;background:#e8f0e8;border-top:1px solid #cdc;display:flex;gap:16px" id="hearts-scores"></div>';
-    wmCreate('hearts', 'Червы', c, 620, 480, '♥');
+    wmCreate('hearts', 'Червы', c, 800, 480, '♥');
     setTimeout(initHearts, 0);
 }
 
@@ -5256,7 +5310,24 @@ function initHearts() {
         scEl.innerHTML=names.map(function(n,i){return '<span>'+n+': <b>'+scores[i]+'</b></span>';}).join('');
     }
 
+    function resizeHeartsWindow() {
+        if (!wmWindows['hearts']) return;
+        const win = document.getElementById('win-hearts');
+        const status = document.getElementById('hearts-status');
+        const table = document.getElementById('hearts-table');
+        const hand = document.getElementById('hearts-hand');
+        const scores = document.getElementById('hearts-scores');
+        if (!win || !table || !hand) return;
+        // Measure natural hand width: 13 cards * ~56px + gaps
+        const cardW = 56, gap = 4;
+        const handNaturalW = 13*cardW + 12*gap + 16; // + padding
+        const desiredW = Math.max(620, handNaturalW, table.scrollWidth + 16);
+        const desiredH = (status ? status.offsetHeight : 30) + table.scrollHeight + hand.scrollHeight + (scores ? scores.offsetHeight : 30) + 24;
+        wmResizeToContent('hearts', desiredW, desiredH, 620, 360, 900, 700);
+    }
+
     newGame();
+    setTimeout(resizeHeartsWindow, 0);
 }
 
 // ==================== MS PAINT ====================
@@ -5359,6 +5430,17 @@ function openPaint() {
         });
         canvas.addEventListener('mouseup',function(){drawing=false;snapshot=null;_paintDrawStart=null;});
         canvas.addEventListener('mouseleave',function(){drawing=false;_paintDrawStart=null;});
+
+        // Size window to fit the fixed canvas + toolbar without scrollbars
+        setTimeout(function() {
+            const toolbar = document.querySelector('#win-paint .paint-toolbar');
+            if (canvas && toolbar) {
+                const pad = 8;
+                const desiredW = canvas.width + pad*2;
+                const desiredH = toolbar.offsetHeight + canvas.height + pad*2;
+                wmResizeToContent('paint', desiredW, desiredH, 400, 300, 900, 700);
+            }
+        }, 0);
     }, 0);
 }
 
@@ -5565,6 +5647,7 @@ function openUpdateDialog(currentVer, newVer) {
 
     // Тело
     const body = document.createElement('div');
+    body.className = 'updater-body';
     body.style.cssText = 'flex:1;padding:14px 16px;overflow-y:auto;';
     body.innerHTML =
         '<table style="border-collapse:collapse;width:100%;margin-bottom:12px;">' +
@@ -5597,6 +5680,13 @@ function openUpdateDialog(currentVer, newVer) {
     c.appendChild(btns);
 
     wmCreate('updater', 'Windows Update', c, 420, 320, '🔄');
+    setTimeout(function() {
+        const body = c.querySelector('.updater-body');
+        if (body) {
+            const desiredH = body.scrollHeight + 28; // account for vertical padding
+            wmResizeToContent('updater', null, desiredH, 400, 280, 640, 600);
+        }
+    }, 0);
 
     dlBtn.addEventListener('click', function() {
         chrome.downloads.download({ url: _UPD_ZIP, filename: 'nostalgic-startpage-update.zip' });
