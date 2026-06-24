@@ -2683,8 +2683,7 @@ function startMenuAction(a) {
         case 'settings':   openSettings();    break; case 'mycomputer': openMyComputer(); break;
         case 'run':        openRun();         break; case 'taskmgr':   openTaskManager(); break;
         case 'stickies':   createSticky();    break;
-        case 'recycle':    openRecycleBin();  break; case 'setbg':      document.getElementById('bg-upload').click(); break;
-        case 'removebg':   localStorage.removeItem(STORAGE.bg); applyBackground(); break;
+        case 'recycle':    openRecycleBin();  break;
         case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
         case 'update':     checkForUpdates(false); break;
         case 'shutdown':   openShutdownDialog(); break;

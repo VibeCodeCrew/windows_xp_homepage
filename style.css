@@ -570,7 +570,7 @@ body {
     flex: 0 0 200px; display: flex; flex-direction: column;
     border-right: 1px solid #c0c0c0; background: white; overflow: hidden;
 }
-.sm-right { flex: 0 0 190px; padding: 4px 0; background: #dce8f8; }
+.sm-right { flex: 1; padding: 4px 0; background: #dce8f8; }
 
 /* Pinned top items */
 .sm-pinned-item {
@@ -604,7 +604,8 @@ body {
 }
 .sm-item:hover { background: linear-gradient(180deg, #2166bd 0%, #1952a3 100%); color: white; }
 .sm-item:hover .sm-icon { color: white; }
-.sm-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.sm-icon { width: 20px; height: 16px; color: #445; text-align: center; flex-shrink: 0; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.sm-icon svg { display: block; }
 .sm-separator { height: 1px; background: #b8b4ac; margin: 3px 8px; }
 
 /* Footer */
