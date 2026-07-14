@@ -20,6 +20,14 @@
     --z-fullscreen: 99999;
 }
 
+/* XP-style icon images generated from Windows XP Icons */
+.xp-icon-img {
+    display: inline-block;
+    vertical-align: middle;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+}
+
 * { box-sizing: border-box; }
 button:focus, button:focus-visible { outline: none; }
 
@@ -206,6 +214,7 @@ body {
     position: relative;
     width: 48px; height: 48px;
     display: flex; align-items: center; justify-content: center;
+    display: flex; align-items: center; justify-content: center;
 }
 
 .xp-icon-favicon {
@@ -252,7 +261,7 @@ body {
 }
 
 /* Folder in icon mode uses same xp-icon wrapper */
-.folder-icon .xp-icon-img-wrapper svg { width: 48px; height: 40px; }
+.folder-icon .xp-icon-img-wrapper img { width: 48px; height: 48px; object-fit: contain; }
 
 /* ===================== ADD BUTTON (both modes) ===================== */
 /* Window mode add button — looks like a real tile */
@@ -1755,15 +1764,21 @@ body {
 #clippy-wrap {
     position: fixed;
     bottom: 50px; right: 20px;
+    width: 90px; height: 120px;
     z-index: 8800;
     user-select: none;
-    cursor: grab;
-    filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.4));
+    pointer-events: none;
     transition: left 0.22s ease, top 0.22s ease;
 }
 #clippy-wrap.clippy-dragging { transition: none; }
-#clippy-wrap:active { cursor: grabbing; }
-#clippy-svg { display: block; overflow: visible; }
+#clippy-svg {
+    display: block; overflow: visible;
+    cursor: grab;
+    pointer-events: auto;
+    filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.4));
+}
+#clippy-svg:active { cursor: grabbing; }
+#clippy-bubble { pointer-events: auto; }
 
 #clippy-bubble {
     position: absolute;

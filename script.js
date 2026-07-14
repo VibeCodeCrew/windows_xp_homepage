@@ -23,9 +23,10 @@ const STORAGE = {
     glassCols:      'edge_glass_cols',
     glassBlur:      'edge_glass_blur',
     avatar:         'xp_avatar',
-    searchEngine:    'edge_search_engine',
-    searchWidget:    'edge_search_widget',
-    searchWidgetPos: 'edge_search_widget_pos',
+    searchEngine:     'edge_search_engine',
+    searchWidget:     'edge_search_widget',
+    searchWidgetPos:  'edge_search_widget_pos',
+    doubleClickOpen:  'edge_double_click_open',
 };
 
 const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
@@ -73,6 +74,7 @@ let settings = {
     glassScreenshotBg: localStorage.getItem('edge_glass_screenshot_bg') === 'true',
     searchEngine:   localStorage.getItem(STORAGE.searchEngine) || 'ya',
     searchWidget:   localStorage.getItem(STORAGE.searchWidget) !== 'false',
+    doubleClickOpen: localStorage.getItem(STORAGE.doubleClickOpen) === 'true',
 };
 // Resolve tile size from preset if not manually set (or migrating from old horizontal defaults)
 (function() {
@@ -182,6 +184,10 @@ function updateSelectionUI() {
 // ==================== UTILITIES ====================
 function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function xpIcon(name, size) {
+    size = size || 16;
+    return '<img class="xp-icon-img" src="icons/' + size + '/' + escapeHtml(name) + '.png" width="' + size + '" height="' + size + '" alt="">';
 }
 function getFaviconUrl(url) {
     try {
@@ -1430,10 +1436,12 @@ function createLinkIconWindow(item, index) {
         if (e.target.closest('.tile-btns') || e.target.closest('.tile-resize-handle')) return;
         if (e.ctrlKey) { selectIcon(index, true); return; }
         selectIcon(index, false);
-        navToUrl(item.url);
+        if (!settings.doubleClickOpen) navToUrl(item.url);
     }
     tb.addEventListener('click', navigate);
     tc.addEventListener('click', navigate);
+    tb.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) navToUrl(item.url); });
+    tc.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) navToUrl(item.url); });
 
     // Close → trash
     tb.querySelector('.tile-btn-close').addEventListener('click', function(e) {
@@ -1471,7 +1479,10 @@ function createLinkIconXP(item, index) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
         if (e.ctrlKey) { selectIcon(index, true); return; }
         selectIcon(index, false);
-        navToUrl(item.url);
+        if (!settings.doubleClickOpen) navToUrl(item.url);
+    });
+    icon.addEventListener('dblclick', function(e) {
+        if (settings.doubleClickOpen) navToUrl(item.url);
     });
     return icon;
 }
@@ -1482,20 +1493,17 @@ function createFolderIconXP(item, index) {
     icon.className = 'desktop-icon folder-icon xp-icon';
     icon.dataset.index = index;
     icon.innerHTML =
-        '<div class="xp-icon-img-wrapper">' +
-          '<svg width="48" height="40" viewBox="0 0 48 40" xmlns="http://www.w3.org/2000/svg">' +
-            '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1"/>' +
-            '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
-            '<path d="M2 13 Q4 13 22 13 L18 8 L2 8 Z" fill="#d8a020"/>' +
-          '</svg>' +
-        '</div>' +
+        '<div class="xp-icon-img-wrapper">' + xpIcon('folder', 48) + '</div>' +
         '<span class="xp-icon-label">' + escapeHtml(item.name) + '</span>';
 
     icon.addEventListener('click', function(e) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
         if (e.ctrlKey) { selectIcon(index, true); return; }
         selectIcon(index, false);
-        openFolder(index);
+        if (!settings.doubleClickOpen) openFolder(index);
+    });
+    icon.addEventListener('dblclick', function(e) {
+        if (settings.doubleClickOpen) openFolder(index);
     });
     return icon;
 }
@@ -1538,38 +1546,10 @@ function saveSysIconPos(id, x, y, dw, dh) {
 
 function getSysIconSVG(id) {
     if (id === 'mycomputer') {
-        return '<svg width="42" height="40" viewBox="0 0 42 40" xmlns="http://www.w3.org/2000/svg">' +
-            '<rect x="2" y="2" width="38" height="27" rx="3" fill="#c8d8ec" stroke="#5878a8" stroke-width="1.5"/>' +
-            '<rect x="4" y="4" width="34" height="23" fill="#7aacd4"/>' +
-            '<rect x="4" y="4" width="34" height="9" fill="rgba(255,255,255,0.18)"/>' +
-            '<line x1="4" y1="27" x2="38" y2="27" stroke="#5878a8" stroke-width="1"/>' +
-            '<rect x="15" y="29" width="12" height="4" fill="#b0b0a0" stroke="#888880" stroke-width="1"/>' +
-            '<rect x="8" y="33" width="26" height="3" rx="1" fill="#b0b0a0" stroke="#888880" stroke-width="1"/>' +
-        '</svg>';
+        return xpIcon('my-computer', 48);
     }
     if (id === 'recycle') {
-        if (trashedLinks.length === 0) {
-            // Empty bin
-            return '<svg width="36" height="42" viewBox="0 0 36 42" xmlns="http://www.w3.org/2000/svg">' +
-                '<rect x="11" y="1" width="14" height="7" rx="3.5" fill="none" stroke="#708070" stroke-width="1.5"/>' +
-                '<rect x="1" y="7" width="34" height="5" rx="1.5" fill="#b8c0b0" stroke="#708070" stroke-width="1.5"/>' +
-                '<path d="M5 12 L7 39 L29 39 L31 12 Z" fill="#d0d8c8" stroke="#708070" stroke-width="1.5"/>' +
-                '<line x1="12" y1="16" x2="13" y2="36" stroke="#708070" stroke-width="1"/>' +
-                '<line x1="18" y1="16" x2="18" y2="36" stroke="#708070" stroke-width="1"/>' +
-                '<line x1="24" y1="16" x2="23" y2="36" stroke="#708070" stroke-width="1"/>' +
-            '</svg>';
-        } else {
-            // Full bin — papers sticking out
-            return '<svg width="36" height="42" viewBox="0 0 36 42" xmlns="http://www.w3.org/2000/svg">' +
-                '<path d="M8 11 Q11 3 14 7 Q17 1 20 6 Q23 2 26 8 L26 12 L8 12 Z" fill="#f0f0d8" stroke="#a0a080" stroke-width="1"/>' +
-                '<rect x="11" y="1" width="14" height="7" rx="3.5" fill="none" stroke="#708070" stroke-width="1.5"/>' +
-                '<rect x="1" y="7" width="34" height="5" rx="1.5" fill="#b8c0b0" stroke="#708070" stroke-width="1.5"/>' +
-                '<path d="M5 12 L7 39 L29 39 L31 12 Z" fill="#d0d8c8" stroke="#708070" stroke-width="1.5"/>' +
-                '<line x1="12" y1="16" x2="13" y2="36" stroke="#708070" stroke-width="1"/>' +
-                '<line x1="18" y1="16" x2="18" y2="36" stroke="#708070" stroke-width="1"/>' +
-                '<line x1="24" y1="16" x2="23" y2="36" stroke="#708070" stroke-width="1"/>' +
-            '</svg>';
-        }
+        return xpIcon(trashedLinks.length === 0 ? 'recycle-bin-empty' : 'recycle-bin', 48);
     }
     return '';
 }
@@ -1588,8 +1568,16 @@ function createSystemIcon(def, slotIndex) {
 
     icon.addEventListener('click', function(e) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
-        if (def.id === 'mycomputer') openMyComputer();
-        else if (def.id === 'recycle')  openRecycleBin();
+        if (!settings.doubleClickOpen) {
+            if (def.id === 'mycomputer') openMyComputer();
+            else if (def.id === 'recycle')  openRecycleBin();
+        }
+    });
+    icon.addEventListener('dblclick', function(e) {
+        if (settings.doubleClickOpen) {
+            if (def.id === 'mycomputer') openMyComputer();
+            else if (def.id === 'recycle')  openRecycleBin();
+        }
     });
 
     // Drag (independent of links[] drag system)
@@ -1650,7 +1638,7 @@ function confirmEmptyTrash() {
     const ok = document.createElement('button'); ok.className = 'xp-dialog-btn xp-dialog-btn-primary'; ok.textContent = 'Да';
     const cn = document.createElement('button'); cn.className = 'xp-dialog-btn'; cn.textContent = 'Нет';
     bd.appendChild(ok); bd.appendChild(cn); c.appendChild(msg); c.appendChild(bd);
-    wmCreate(winId, 'Очистить корзину', c, 300, 145, '\uD83D\uDDD1\uFE0F');
+    wmCreate(winId, 'Очистить корзину', c, 300, 145, xpIcon('recycle-bin',16));
     ok.addEventListener('click', function() {
         trashedLinks = []; localStorage.setItem(STORAGE.trash, JSON.stringify(trashedLinks));
         wmClose(winId); renderDesktop();
@@ -1877,7 +1865,7 @@ function openFolder(folderIndex) {
     });
 
     renderFolderContent();
-    const win = wmCreate(winId, folder.name, contentEl, 480, 350, '\uD83D\uDCC1');
+    const win = wmCreate(winId, folder.name, contentEl, 480, 350, xpIcon('folder',16));
     folderWin = win; // expose for drag handler
     if (win) {
         win._renderFolderContent = renderFolderContent;
@@ -2108,40 +2096,40 @@ function showContextMenu(x, y, items) {
 // ==================== CONTEXT MENU DEFINITIONS ====================
 function showDesktopContextMenu(x, y) {
     showContextMenu(x, y, [
-        { label: 'Вид', icon: '\uD83D\uDC41', submenu: [
+        { label: 'Вид', icon: xpIcon('desktop',16), submenu: [
             { label: 'Плитки (стекло)',  icon: '', check: settings.viewMode==='glass',  action: function() { settings.viewMode='glass';  localStorage.setItem(STORAGE.viewMode,'glass');  renderDesktop(); } },
             { label: 'Окна с превью',   icon: '', check: settings.viewMode==='window', action: function() { settings.viewMode='window'; localStorage.setItem(STORAGE.viewMode,'window'); renderDesktop(); } },
             { label: 'Ярлыки XP',       icon: '', check: settings.viewMode==='icon',   action: function() { settings.viewMode='icon';   localStorage.setItem(STORAGE.viewMode,'icon');   renderDesktop(); } },
         ]},
-        { label: 'Создать', icon: '\uD83D\uDCC4', submenu: [
-            { label: 'Ярлык', icon: '\uD83D\uDD17', action: function() { openAddDialog(null); } },
-            { label: 'Папку', icon: '\uD83D\uDCC1', action: function() { openAddFolderDialog(); } },
+        { label: 'Создать', icon: xpIcon('new-folder',16), submenu: [
+            { label: 'Ярлык', icon: xpIcon('internet-shortcut',16), action: function() { openAddDialog(null); } },
+            { label: 'Папку', icon: xpIcon('folder',16), action: function() { openAddFolderDialog(); } },
         ]},
-        { label: 'Вставить ярлык', icon: '\uD83D\uDCCB', action: function() { pasteUrl(null); } },
+        { label: 'Вставить ярлык', icon: xpIcon('paste',16), action: function() { pasteUrl(null); } },
         'sep',
         { label: (settings.snapToGrid ? '\u2713 ' : '') + 'Выровнять по сетке', icon: '\u22EE', action: function() {
             settings.snapToGrid = !settings.snapToGrid;
             localStorage.setItem(STORAGE.snapToGrid, settings.snapToGrid);
         }},
         { label: 'Упорядочить иконки', icon: '\u2630', action: function() { autoArrange(); } },
-        { label: 'Обновить',           icon: '\uD83D\uDD04', action: function() { renderDesktop(); } },
+        { label: 'Обновить',           icon: xpIcon('update',16), action: function() { renderDesktop(); } },
         'sep',
-        { label: 'Свойства экрана', icon: '\u2699\uFE0F', action: openSettings },
+        { label: 'Свойства экрана', icon: xpIcon('control-panel',16), action: openSettings },
     ]);
 }
 
 function showSysIconContextMenu(x, y, id) {
     if (id === 'mycomputer') {
         showContextMenu(x, y, [
-            { label: 'Открыть',     icon: '\uD83D\uDCBB', action: openSystemInfo },
+            { label: 'Открыть',     icon: xpIcon('my-computer',16), action: openSystemInfo },
             'sep',
             { label: 'Свойства',   icon: '\u2699\uFE0F', action: openSettings },
         ]);
     } else if (id === 'recycle') {
         showContextMenu(x, y, [
-            { label: 'Открыть',         icon: '\uD83D\uDDD1\uFE0F', action: openRecycleBin },
+            { label: 'Открыть',         icon: xpIcon('recycle-bin',16), action: openRecycleBin },
             'sep',
-            { label: 'Очистить корзину', icon: '\u2716', danger: true,
+            { label: 'Очистить корзину', icon: xpIcon('delete',16), danger: true,
               disabled: trashedLinks.length === 0,
               action: confirmEmptyTrash },
         ]);
@@ -2154,7 +2142,7 @@ function showMultiSelectContextMenu(x, y) {
     showContextMenu(x, y, [
         { label: 'Выбрано элементов: ' + n, disabled: true, action: function(){} },
         'sep',
-        { label: 'Открыть все (' + n + ')', icon: '\u25B6', action: function() {
+        { label: 'Открыть все (' + n + ')', icon: xpIcon('play',16), action: function() {
             indices.forEach(function(i) {
                 const it = links[i];
                 if (it && !it.isFolder) window.open(it.url, '_blank');
@@ -2180,12 +2168,12 @@ function showLinkIconContextMenu(x, y, idx) {
     if (!selectedIndices.has(idx)) { selectedIndices.clear(); selectedIndices.add(idx); updateSelectionUI(); }
     if (selectedIndices.size > 1) { showMultiSelectContextMenu(x, y); return; }
     showContextMenu(x, y, [
-        { label: 'Открыть',                 icon: '\u25B6',       action: function() { navToUrl(item.url); } },
-        { label: 'Открыть в новой вкладке', icon: '\u2197\uFE0F', action: function() { window.open(item.url,'_blank'); } },
-        { label: 'Открыть в новом окне',    icon: '\uD83E\uDEDF', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url}); else window.open(item.url,'_blank'); } },
+        { label: 'Открыть',                 icon: xpIcon('play',16),       action: function() { navToUrl(item.url); } },
+        { label: 'Открыть в новой вкладке', icon: xpIcon('go',16), action: function() { window.open(item.url,'_blank'); } },
+        { label: 'Открыть в новом окне',    icon: xpIcon('open',16), action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url}); else window.open(item.url,'_blank'); } },
         { label: 'Инкогнито',               icon: '\uD83D\uDD75\uFE0F', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url,incognito:true}); else window.open(item.url,'_blank'); } },
         'sep',
-        { label: 'Изменить', icon: '\u270F\uFE0F', action: function() { openEditDialog(idx, null); } },
+        { label: 'Изменить', icon: xpIcon('rename',16), action: function() { openEditDialog(idx, null); } },
         { label: 'Обновить миниатюру', icon: '📸', action: function() { requestScreenshot(item.url, item); } },
         { label: 'Удалить',  icon: '\uD83D\uDDD1\uFE0F', danger: true, action: function() { trashLink(idx); } },
     ]);
@@ -2195,7 +2183,7 @@ function showFolderIconContextMenu(x, y, idx) {
     if (!selectedIndices.has(idx)) { selectedIndices.clear(); selectedIndices.add(idx); updateSelectionUI(); }
     if (selectedIndices.size > 1) { showMultiSelectContextMenu(x, y); return; }
     showContextMenu(x, y, [
-        { label: 'Открыть',          icon: '\uD83D\uDCC2', action: function() { openFolder(idx); } },
+        { label: 'Открыть',          icon: xpIcon('folder-open',16), action: function() { openFolder(idx); } },
         'sep',
         { label: 'Добавить ярлык',   icon: '\uD83D\uDD17', action: function() { openAddDialog(idx); } },
         { label: 'Вставить ярлык',   icon: '\uD83D\uDCCB', action: function() { pasteUrl(idx); } },
@@ -2210,7 +2198,7 @@ function showFolderMultiSelectMenu(x, y, folderIdx, indices, onUpdate) {
     showContextMenu(x, y, [
         { label: 'Выбрано: ' + n, disabled: true, action: function(){} },
         'sep',
-        { label: 'Открыть все (' + n + ')', icon: '\u25B6', action: function() {
+        { label: 'Открыть все (' + n + ')', icon: xpIcon('play',16), action: function() {
             indices.forEach(function(ci) {
                 const child = links[folderIdx] && links[folderIdx].items[ci];
                 if (child) window.open(child.url, '_blank');
@@ -2240,7 +2228,7 @@ function showFolderMultiSelectMenu(x, y, folderIdx, indices, onUpdate) {
 function showFolderItemContextMenu(x, y, folderIdx, childIdx) {
     const child = links[folderIdx] && links[folderIdx].items[childIdx]; if (!child) return;
     showContextMenu(x, y, [
-        { label: 'Открыть',                 icon: '\u25B6',       action: function() { navToUrl(child.url); } },
+        { label: 'Открыть',                 icon: xpIcon('play',16),       action: function() { navToUrl(child.url); } },
         { label: 'Открыть в новой вкладке', icon: '\u2197\uFE0F', action: function() { window.open(child.url,'_blank'); } },
         { label: 'Открыть в новом окне',    icon: '\uD83E\uDEDF', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:child.url}); else window.open(child.url,'_blank'); } },
         'sep',
@@ -2257,7 +2245,7 @@ function showWindowContextMenu(x, y, id) {
         { label: w.minimized ? 'Восстановить' : 'Свернуть', icon: '_',  action: function() { if (w.minimized) { wmRestore(id); wmFocus(id); } else wmMinimize(id); } },
         { label: w.maximized ? 'Восстановить размер' : 'Развернуть', icon: '&#9633;', action: function() { wmMaximize(id); } },
         'sep',
-        { label: 'Закрыть', icon: '\u2715', danger: true, action: function() { wmClose(id); } },
+        { label: 'Закрыть', icon: xpIcon('delete',16), danger: true, action: function() { wmClose(id); } },
     ]);
 }
 
@@ -2527,7 +2515,7 @@ function showTileDialog(isFolder, item) {
     const sv=document.createElement('button'); sv.className='xp-dialog-btn xp-dialog-btn-primary'; sv.textContent='OK';
     const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
     bd.appendChild(sv); bd.appendChild(cn); c.appendChild(bd);
-    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:250, isFolder?'\uD83D\uDCC1':'\uD83D\uDD17');
+    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:250, isFolder?xpIcon('folder',16):xpIcon('internet-shortcut',16));
     if (wmWindows[winId]) wmWindows[winId].onClose = function(){ if (acEl && acEl.parentNode) acEl.remove(); acEl = null; };
     setTimeout(function(){ni.focus();},50);
 
@@ -2700,21 +2688,21 @@ function openAllPrograms() {
 
     // Папка: Игры (закрыта по умолчанию)
     var gameItems = [
-        { icon:'💣', name:'Сапёр',   action: function(){ closeStartMenu(); openMinesweeper(); } },
-        { icon:'♠',  name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
-        { icon:'♥',  name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
-        { icon:'⚫', name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
+        { icon: xpIcon('minesweeper',16), name:'Сапёр',   action: function(){ closeStartMenu(); openMinesweeper(); } },
+        { icon: xpIcon('solitaire',16),  name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
+        { icon: xpIcon('hearts',16),  name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
+        { icon: xpIcon('pinball',16), name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
     ];
     list.appendChild(makeFolderBlock('Игры', gameItems, false));
 
     // Подпапка: Стандартные (встроенные инструменты)
     var builtins = [
-        { icon:'📝', name:'Блокнот',          action: function(){ closeStartMenu(); openNotepad(); } },
-        { icon:'📃', name:'WordPad',          action: function(){ closeStartMenu(); openWordPad(); } },
-        { icon:'🎨', name:'Paint',            action: function(){ closeStartMenu(); openPaint(); } },
-        { icon:'🧮', name:'Калькулятор',      action: function(){ closeStartMenu(); openCalculator(); } },
-        { icon:'⬛', name:'Командная строка', action: function(){ closeStartMenu(); openCmd(); } },
-        { icon:'📊', name:'Диспетчер задач',  action: function(){ closeStartMenu(); openTaskManager(); } },
+        { icon: xpIcon('notepad',16), name:'Блокнот',          action: function(){ closeStartMenu(); openNotepad(); } },
+        { icon: xpIcon('wordpad',16), name:'WordPad',          action: function(){ closeStartMenu(); openWordPad(); } },
+        { icon: xpIcon('paint',16), name:'Paint',            action: function(){ closeStartMenu(); openPaint(); } },
+        { icon: xpIcon('calculator',16), name:'Калькулятор',      action: function(){ closeStartMenu(); openCalculator(); } },
+        { icon: xpIcon('cmd',16), name:'Командная строка', action: function(){ closeStartMenu(); openCmd(); } },
+        { icon: xpIcon('taskmgr',16), name:'Диспетчер задач',  action: function(){ closeStartMenu(); openTaskManager(); } },
     ];
 
     // Папка: Программы — «Стандартные» + папки рабочего стола + одиночные ярлыки
@@ -2765,7 +2753,7 @@ function makeFolderBlock(title, items, openByDefault) {
         var el = document.createElement('div');
         el.className = 'sm-prog-item sm-prog-item-indent';
         if (item.icon) {
-            el.innerHTML = '<span class="sm-prog-no-icon">' + escapeHtml(item.icon) + '</span><span>' + escapeHtml(item.name) + '</span>';
+            el.innerHTML = '<span class="sm-prog-no-icon">' + (item.icon.indexOf('<') !== -1 ? item.icon : escapeHtml(item.icon)) + '</span><span>' + escapeHtml(item.name) + '</span>';
         } else if (item.favicon) {
             var smImg = document.createElement('img');
             smImg.className = 'sm-prog-favicon';
@@ -2777,7 +2765,7 @@ function makeFolderBlock(title, items, openByDefault) {
             el.appendChild(smImg);
             el.appendChild(smName);
         } else {
-            el.innerHTML = '<span class="sm-prog-no-icon">📄</span><span>' + escapeHtml(item.name) + '</span>';
+            el.innerHTML = '<span class="sm-prog-no-icon">' + xpIcon('document',16) + '</span><span>' + escapeHtml(item.name) + '</span>';
         }
         el.addEventListener('click', item.action);
         body.appendChild(el);
@@ -2811,7 +2799,7 @@ function openSearch() {
     const yB=document.createElement('button'); yB.className='xp-dialog-btn xp-dialog-btn-primary'; yB.textContent='Яндекс';
     const gB=document.createElement('button'); gB.className='xp-dialog-btn'; gB.textContent='Google';
     bd.appendChild(yB); bd.appendChild(gB); f.appendChild(inp); f.appendChild(bd); c.appendChild(f);
-    wmCreate('search','Поиск',c,380,155,'\uD83D\uDD0D');
+    wmCreate('search','Поиск',c,380,155, xpIcon('search',16));
     function go(engine){const q=inp.value.trim();if(!q)return;window.open(searchUrlFor(engine,q),'_blank');}
     yB.addEventListener('click',function(){go('ya');}); gB.addEventListener('click',function(){go('go');});
     attachSearchAutocomplete(inp, {
@@ -2888,7 +2876,7 @@ function toggleVolumePopup() {
     const popup = document.createElement('div');
     popup.id = 'xp-volume-popup'; popup.className = 'xp-volume-popup';
     const curVol = parseFloat(localStorage.getItem('edge_volume') || '0.7');
-    const lbl = document.createElement('label'); lbl.textContent = '🔊';
+    const lbl = document.createElement('label'); lbl.innerHTML = xpIcon('volume',16);
     const slider = document.createElement('input'); slider.type='range'; slider.min='0'; slider.max='1'; slider.step='0.05'; slider.value=curVol;
     const valLbl = document.createElement('label'); valLbl.textContent = Math.round(curVol*100)+'%';
     popup.appendChild(lbl); popup.appendChild(slider); popup.appendChild(valLbl);
@@ -2898,7 +2886,7 @@ function toggleVolumePopup() {
     popup.style.bottom = (window.innerHeight - r.top + 2) + 'px';
     popup.style.left = r.left + 'px';
     function updateVolIcon(v) {
-        tvEl.textContent = v === 0 ? '🔇' : v < 0.3 ? '🔈' : v < 0.7 ? '🔉' : '🔊';
+        tvEl.innerHTML = v === 0 ? xpIcon('volume-mute',16) : xpIcon('volume',16);
     }
     slider.addEventListener('input', function() {
         const v = parseFloat(slider.value);
@@ -2966,7 +2954,7 @@ function openRun() {
     const ok=document.createElement('button'); ok.className='xp-dialog-btn xp-dialog-btn-primary'; ok.textContent='OK';
     const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
     bd.appendChild(ok); bd.appendChild(cn); c.appendChild(bd);
-    wmCreate('run','Выполнить',c,360,140,'\u25B6');
+    wmCreate('run','Выполнить',c,360,140, xpIcon('run',16));
     setTimeout(function(){inp.focus();},50);
     ok.addEventListener('click',function(){
         acHide(); let url=inp.value.trim(); if(!url)return;
@@ -3069,7 +3057,7 @@ function openTaskManager() {
     Object.values(panels).forEach(function(p){c.appendChild(p);});
     c.appendChild(statusBar);
 
-    wmCreate('taskmgr','Диспетчер задач',c,520,360,'📊');
+    wmCreate('taskmgr','Диспетчер задач',c,520,360, xpIcon('taskmgr',16));
     const tmRefresh = setInterval(function(){
         if(!wmWindows['taskmgr']){clearInterval(tmRefresh);return;}
         const activeTab=c.querySelector('.settings-tab.active');
@@ -3103,25 +3091,25 @@ function openLinksExplorer() {
     // Sidebar
     const sidebar = document.createElement('div'); sidebar.className = 'xp-explorer-sidebar';
     const sbTitle = document.createElement('div'); sbTitle.className = 'xp-explorer-sb-title';
-    sbTitle.innerHTML = '<span>🔗</span> Действия';
+    sbTitle.innerHTML = '<span>'+xpIcon('internet-shortcut',16)+'</span> Действия';
     sidebar.appendChild(sbTitle);
     function mkSbBtn(label, fn) {
         const btn = document.createElement('div'); btn.className = 'xp-explorer-sb-item';
-        btn.textContent = label;
+        btn.innerHTML = label;
         btn.addEventListener('click', fn);
         sidebar.appendChild(btn);
     }
-    mkSbBtn('🌐 Открыть', function() {
+    mkSbBtn(xpIcon('internet',16)+' Открыть', function() {
         if (selectedIdx < 0 || !links[selectedIdx]) return;
         chrome.tabs.create({ url: links[selectedIdx].url });
     });
-    mkSbBtn('✏️ Переименовать', function() {
+    mkSbBtn(xpIcon('rename',16)+' Переименовать', function() {
         if (selectedIdx < 0 || !links[selectedIdx]) return;
         const item = links[selectedIdx];
         const newName = prompt('Новое название:', item.name);
         if (newName && newName.trim()) { item.name = newName.trim(); saveLinks(); renderList(); }
     });
-    mkSbBtn('🗑️ Удалить', function() {
+    mkSbBtn(xpIcon('delete',16)+' Удалить', function() {
         if (selectedIdx < 0 || !links[selectedIdx]) return;
         const item = links[selectedIdx];
         item.deletedAt = Date.now();
@@ -3188,7 +3176,7 @@ function openLinksExplorer() {
     status.textContent = 'Объектов: ' + links.filter(function(l){ return !l.isFolder; }).length;
     c.appendChild(status);
 
-    wmCreate('links', 'Избранное', c, 560, 360, '💾');
+    wmCreate('links', 'Избранное', c, 560, 360, xpIcon('favorites',16));
 }
 
 // ==================== MY COMPUTER ====================
@@ -3198,23 +3186,23 @@ function openMyComputer() {
 
     const sidebar = document.createElement('div'); sidebar.className = 'mycomputer-sidebar';
     sidebar.innerHTML = '<h4>Системные задачи</h4>';
-    [['📝 Блокнот', function(){openNotepad();}],['🔍 Поиск', function(){openSearch();}],['♻️ Корзина', function(){openRecycleBin();}],['💻 Сведения', function(){openSystemInfo();}]].forEach(function(item){
+    [[xpIcon('notepad',16)+' Блокнот', function(){openNotepad();}],[xpIcon('search',16)+' Поиск', function(){openSearch();}],[xpIcon('recycle-bin',16)+' Корзина', function(){openRecycleBin();}],[xpIcon('my-computer',16)+' Сведения', function(){openSystemInfo();}]].forEach(function(item){
         const d=document.createElement('div'); d.className='mycomputer-sidebar-item';
-        d.textContent=item[0]; d.addEventListener('click',item[1]); sidebar.appendChild(d);
+        d.innerHTML=item[0]; d.addEventListener('click',item[1]); sidebar.appendChild(d);
     });
 
     const main = document.createElement('div'); main.className = 'mycomputer-main';
     const addr = document.createElement('div'); addr.className = 'mycomputer-address';
-    addr.innerHTML = '<span>💻</span><span>Мой компьютер</span>';
+    addr.innerHTML = '<span>'+xpIcon('my-computer',16)+'</span><span>Мой компьютер</span>';
     main.appendChild(addr);
 
     const drives = document.createElement('div'); drives.className = 'mycomputer-drives';
     const driveItems = [
-        {icon:'💾',name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){openLinksExplorer();}},
-        {icon:'📚',name:'Избранное (D:)',info:'Закладки браузера',action:function(){openBrowserBookmarks();}},
-        {icon:'📝',name:'Документы',info:'WordPad',action:function(){openWordPad();}},
-        {icon:'♻️',name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
-        {icon:'💻',name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
+        {icon:xpIcon('folder',32),name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){openLinksExplorer();}},
+        {icon:xpIcon('favorites',32),name:'Избранное (D:)',info:'Закладки браузера',action:function(){openBrowserBookmarks();}},
+        {icon:xpIcon('wordpad',32),name:'Документы',info:'WordPad',action:function(){openWordPad();}},
+        {icon:xpIcon('recycle-bin',32),name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
+        {icon:xpIcon('my-computer',32),name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
     ];
     driveItems.forEach(function(d){
         const el=document.createElement('div'); el.className='mycomputer-drive';
@@ -3223,7 +3211,7 @@ function openMyComputer() {
     });
     main.appendChild(drives);
     wrap.appendChild(sidebar); wrap.appendChild(main);
-    wmCreate('mycomputer','Мой компьютер',wrap,540,360,'💻');
+    wmCreate('mycomputer','Мой компьютер',wrap,540,360, xpIcon('my-computer',16));
 }
 
 // ==================== BROWSER BOOKMARKS ====================
@@ -3247,7 +3235,7 @@ function openBrowserBookmarks() {
     // Sidebar — folder tree
     var sidebar = document.createElement('div'); sidebar.className = 'xp-explorer-sidebar';
     var sbTitle = document.createElement('div'); sbTitle.className = 'xp-explorer-sb-title';
-    sbTitle.innerHTML = '📂 Папки';
+    sbTitle.innerHTML = xpIcon('folder',16)+' Папки';
     sidebar.appendChild(sbTitle);
     var treeEl = document.createElement('div'); treeEl.id = 'bkmarks-tree';
     sidebar.appendChild(treeEl);
@@ -3263,7 +3251,7 @@ function openBrowserBookmarks() {
     body.appendChild(sidebar); body.appendChild(main);
     wrap.appendChild(body);
 
-    wmCreate('bkmarks', 'Избранное (D:)', wrap, 580, 420, '📚');
+    wmCreate('bkmarks', 'Избранное (D:)', wrap, 580, 420, xpIcon('favorites',16));
 
     // F6: Реакция на первое открытие диска D
     if (typeof clippySay === 'function' && !localStorage.getItem('edge_ddrive_seen')) {
@@ -3359,7 +3347,7 @@ function _showBkmarksFolder(node, rowsEl, statusEl, treeEl) {
         bmImg.onerror = function(){
             var fb = document.createElement('span');
             fb.className = 'xp-explorer-row-ico-fallback';
-            fb.textContent = '🌐';
+            fb.innerHTML = xpIcon('internet',16);
             bmImg.replaceWith(fb);
         };
         row.insertBefore(bmImg, row.firstChild);
@@ -3610,6 +3598,19 @@ function openSettings() {
     clLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
     clRow.appendChild(clChk); clRow.appendChild(clLbl); parP.appendChild(clRow);
 
+    // Double-click option
+    const dcRow = document.createElement('div'); dcRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:10px;';
+    const dcChk = document.createElement('input'); dcChk.type = 'checkbox'; dcChk.id = 'settings-dc-chk';
+    dcChk.checked = !!settings.doubleClickOpen;
+    dcChk.addEventListener('change', function(){
+        settings.doubleClickOpen = dcChk.checked;
+        localStorage.setItem(STORAGE.doubleClickOpen, settings.doubleClickOpen ? 'true' : 'false');
+    });
+    const dcLbl = document.createElement('label'); dcLbl.htmlFor = 'settings-dc-chk';
+    dcLbl.textContent = 'Открывать ярлыки двойным кликом (как в Windows XP)';
+    dcLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
+    dcRow.appendChild(dcChk); dcRow.appendChild(dcLbl); parP.appendChild(dcRow);
+
     // Search settings
     const seSep = document.createElement('div'); seSep.style.cssText = 'border-top:1px solid #d4d0c8;margin:12px 0 8px;'; parP.appendChild(seSep);
     const seTitle = document.createElement('div'); seTitle.textContent = 'Поиск'; seTitle.style.cssText = 'font-weight:bold;font-size:11px;margin-bottom:6px;'; parP.appendChild(seTitle);
@@ -3643,7 +3644,7 @@ function openSettings() {
     swLbl.style.cssText = 'font-family:Tahoma,sans-serif;font-size:11px;cursor:pointer;';
     swRow.appendChild(swChk); swRow.appendChild(swLbl); parP.appendChild(swRow);
 
-    wmCreate('settings', 'Свойства: Экран', c, 460, 520, '\u2699\uFE0F');
+    wmCreate('settings', 'Свойства: Экран', c, 460, 520, xpIcon('control-panel',16));
     setTimeout(function() {
         const content = document.querySelector('#win-settings .xp-win-content');
         if (content) {
@@ -3671,7 +3672,7 @@ function openRecycleBin() {
         cb.addEventListener('click',function(){trashedLinks=[];localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));rend();});
         c.appendChild(cb);
     }
-    rend(); wmCreate('recycle','Корзина',c,520,340,'\uD83D\uDDD1\uFE0F');
+    rend(); wmCreate('recycle','Корзина',c,520,340, xpIcon('recycle-bin',16));
 }
 
 // ==================== SYSTEM INFO ====================
@@ -3685,7 +3686,7 @@ function openSystemInfo() {
         '<div class="sysinfo-row"><b>Окно:</b> '+window.innerWidth+'\xD7'+window.innerHeight+'</div>'+
         '<div class="sysinfo-row"><b>Аптайм страницы:</b> '+Math.floor(up/3600)+'ч '+Math.floor((up%3600)/60)+'м '+(up%60)+'с</div>'+
         '<div class="sysinfo-row"><b>Ярлыков:</b> '+links.length+'</div>';
-    wmCreate('sysinfo','Свойства системы',c,430,290,'\uD83D\uDCBB');
+    wmCreate('sysinfo','Свойства системы',c,430,290, xpIcon('my-computer',16));
 }
 
 // ==================== SHUTDOWN ====================
@@ -3693,7 +3694,7 @@ function openShutdownDialog() {
     wmClose('shutdown');
     const c=document.createElement('div'); c.className='shutdown-dialog';
     c.innerHTML='<div style="font-size:24px">\uD83E\uDE9F</div><div class="shutdown-text"><b>Завершение работы Windows</b><p>Выберите действие:</p><select id="shutdown-select"><option value="close">Закрыть вкладку</option><option value="reload">Перезагрузить страницу</option></select></div><div class="dialog-btns"><button id="shutdown-ok" class="xp-dialog-btn xp-dialog-btn-primary">OK</button><button id="shutdown-cancel" class="xp-dialog-btn">Отмена</button></div>';
-    wmCreate('shutdown','Завершение работы Windows',c,320,200,'\u23FB');
+    wmCreate('shutdown','Завершение работы Windows',c,320,200, xpIcon('logout',16));
     setTimeout(function(){
         document.getElementById('shutdown-ok').addEventListener('click',function(){const v=document.getElementById('shutdown-select').value;if(v==='close')window.close();else location.reload();});
         document.getElementById('shutdown-cancel').addEventListener('click',function(){wmClose('shutdown');});
@@ -3713,7 +3714,7 @@ function openNotepad() {
     const ta=document.createElement('textarea'); ta.className='notepad-textarea'; ta.value=saved; ta.spellcheck=false;
     const sb=document.createElement('div'); sb.className='notepad-statusbar'; sb.textContent='Строка: 1 | Столбец: 1';
     c.appendChild(mb); c.appendChild(ta); c.appendChild(sb);
-    wmCreate('notepad','Блокнот',c,560,400,'\uD83D\uDCDD');
+    wmCreate('notepad','Блокнот',c,560,400, xpIcon('notepad',16));
     var _notepadLongShown = false;
     ta.addEventListener('keyup',function(){
         const b=ta.value.substr(0,ta.selectionStart).split('\n');
@@ -3762,7 +3763,7 @@ function openCalculator() {
     function stdContentW() { return PAD + STD_COLS*BTN_W + (STD_COLS-1)*GAP + PAD; }
     function sciContentW() { return stdContentW() + GAP + SCI_COLS*BTN_W + (SCI_COLS-1)*GAP; }
     const contentH = PAD + MENU_H + GAP_DISP + DISP_H + GAP_DISP + ROWS*BTN_H + (ROWS-1)*GAP + PAD;
-    wmCreate('calculator','Калькулятор',c,stdContentW(),contentH,'\uD83D\uDD22');
+    wmCreate('calculator','Калькулятор',c,stdContentW(),contentH, xpIcon('calculator',16));
     setTimeout(function() { wmResizeToContent('calculator', stdContentW(), contentH, 200, 200); }, 0);
 
     let cs={disp:'0',prev:null,op:null,waitOp:false,mem:0};
@@ -3851,7 +3852,7 @@ function openMinesweeper() {
 
     const c = document.createElement('div');
     c.className = 'mines-window';
-    wmCreate('minesweeper', 'Сапёр', c, 250, 370, '\uD83D\uDCA3');
+    wmCreate('minesweeper', 'Сапёр', c, 250, 370, xpIcon('minesweeper',16));
 
     function getD() { return DIFFS[di]; }
 
@@ -4163,7 +4164,7 @@ function openPinball() {
         '</div>';
     // Size window to fit the virtual pinball table + HUD without internal scrollbars
     const PB_VW = 320, PB_VH = 480;
-    wmCreate('pinball', 'Space Cadet Pinball', c, PB_VW + 40, PB_VH + 80, '⚪');
+    wmCreate('pinball', 'Space Cadet Pinball', c, PB_VW + 40, PB_VH + 80, xpIcon('pinball',16));
 
     setTimeout(function() {
         document.getElementById('pb-restart')?.addEventListener('click', function() {
@@ -4794,7 +4795,7 @@ function openSolitaire() {
     const contentW = PAD + COLS*CARD_W + (COLS-1)*GAP + PAD;
     const maxTabH = CARD_H + (13-1)*OVERLAP;
     const contentH = PAD + TOOLBAR_H + GAP + CARD_H + GAP + maxTabH + PAD;
-    wmCreate('solitaire', 'Косынка', c, contentW, contentH, '♠');
+    wmCreate('solitaire', 'Косынка', c, contentW, contentH, xpIcon('solitaire',16));
     setTimeout(function() { initSolitaire(); }, 0);
 }
 
@@ -5170,7 +5171,7 @@ function openHearts() {
     const c = document.createElement('div');
     c.className = 'hearts-window';
     c.innerHTML = '<div id="hearts-status" style="padding:6px 10px;font-size:11px;background:#c0d8c0;border-bottom:1px solid #8a8">Ваш ход. Разыграйте карту.</div><div id="hearts-table" class="hearts-table"></div><div id="hearts-hand" class="hearts-hand"></div><div style="padding:4px 8px;background:#e8f0e8;border-top:1px solid #cdc;display:flex;gap:16px" id="hearts-scores"></div>';
-    wmCreate('hearts', 'Червы', c, 800, 480, '♥');
+    wmCreate('hearts', 'Червы', c, 800, 480, xpIcon('hearts',16));
     setTimeout(initHearts, 0);
 }
 
@@ -5401,7 +5402,7 @@ function openPaint() {
     const c = document.createElement('div');
     c.className = 'paint-window';
     c.innerHTML = '<div class="paint-toolbar"><div class="paint-tools"><button class="paint-tool active" data-tool="pencil" title="Карандаш">✏️</button><button class="paint-tool" data-tool="fill" title="Заливка">🪣</button><button class="paint-tool" data-tool="eraser" title="Ластик">🧹</button><button class="paint-tool" data-tool="rect" title="Прямоугольник">▭</button><button class="paint-tool" data-tool="circle" title="Эллипс">⬭</button><button class="paint-tool" data-tool="line" title="Линия">/</button><button class="paint-tool" data-tool="text" title="Текст">A</button></div><div class="paint-colors" id="paint-colors"></div><div class="paint-size-wrap"><label style="font-size:10px">Размер: <input type="range" id="paint-size" min="1" max="30" value="3"></label></div><button class="xp-dialog-btn" id="paint-clear" style="font-size:10px">Очистить</button><button class="xp-dialog-btn" id="paint-save" style="font-size:10px">Сохранить PNG</button></div><div class="paint-canvas-wrap"><canvas id="paint-canvas" width="680" height="420"></canvas></div>';
-    wmCreate('paint', 'Paint', c, 720, 540, '🎨');
+    wmCreate('paint', 'Paint', c, 720, 540, xpIcon('paint',16));
     setTimeout(function() {
         const canvas = document.getElementById('paint-canvas');
         if (!canvas) return;
@@ -5515,7 +5516,7 @@ function openWordPad() {
     const c = document.createElement('div');
     c.className = 'wordpad-window';
     c.innerHTML = '<div class="wordpad-toolbar"><select id="wp-font" style="font-size:11px;width:100px"><option>Arial</option><option>Times New Roman</option><option>Courier New</option><option>Georgia</option><option>Verdana</option></select><select id="wp-size" style="font-size:11px;width:50px"><option>10</option><option>12</option><option selected>14</option><option>18</option><option>24</option><option>36</option></select><button class="wp-btn" data-cmd="bold" title="Жирный"><b>B</b></button><button class="wp-btn" data-cmd="italic" title="Курсив"><i>I</i></button><button class="wp-btn" data-cmd="underline" title="Подчеркнуть"><u>U</u></button><span style="width:8px;display:inline-block"></span><button class="wp-btn" data-cmd="justifyLeft" title="По левому краю">&#9776;</button><button class="wp-btn" data-cmd="justifyCenter" title="По центру">&#9783;</button><button class="wp-btn" data-cmd="justifyRight" title="По правому краю">&#9777;</button><span style="width:8px;display:inline-block"></span><input type="color" id="wp-color" value="#000000" style="width:22px;height:22px;padding:0;border:1px solid #999;cursor:pointer" title="Цвет текста"><button class="xp-dialog-btn" id="wp-save" style="font-size:10px;margin-left:4px">Сохранить</button><button class="xp-dialog-btn" id="wp-load" style="font-size:10px">Загрузить</button></div><div class="wordpad-ruler"><div style="flex:1;height:2px;background:linear-gradient(90deg,#aaa 0,#aaa 1px,transparent 0) 0 0/8px 2px repeat-x"></div></div><div id="wp-editor" class="wordpad-editor" contenteditable="true" spellcheck="false"></div>';
-    wmCreate('wordpad','WordPad',c,640,480,'📝');
+    wmCreate('wordpad','WordPad',c,640,480, xpIcon('wordpad',16));
     setTimeout(function(){
         const editor=document.getElementById('wp-editor');
         const fontSel=document.getElementById('wp-font');
@@ -5671,7 +5672,7 @@ async function checkForUpdates(silent) {
             if (trayUpd) trayUpd.classList.remove('hidden');
             setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_update, 'excited'); }, 1000);
             if (silent) {
-                showNotification('Windows Update', 'Доступна версия ' + remote.version + ' (сейчас ' + local + ')', '🔔', 7000);
+                showNotification('Windows Update', 'Доступна версия ' + remote.version + ' (сейчас ' + local + ')', xpIcon('update',16), 7000);
             } else {
                 openUpdateDialog(local, remote.version);
             }
@@ -5744,7 +5745,7 @@ function openUpdateDialog(currentVer, newVer) {
     btns.appendChild(dlBtn); btns.appendChild(extBtn); btns.appendChild(laterBtn);
     c.appendChild(btns);
 
-    wmCreate('updater', 'Windows Update', c, 420, 320, '🔄');
+    wmCreate('updater', 'Windows Update', c, 420, 320, xpIcon('update',16));
     setTimeout(function() {
         const body = c.querySelector('.updater-body');
         if (body) {
@@ -7866,7 +7867,9 @@ function _clippyApplyPos(wrap) {
 }
 
 function _clippyInitDrag(wrap) {
-    wrap.addEventListener('contextmenu', function(e) {
+    var svg = wrap.querySelector('#clippy-svg');
+    if (!svg) return;
+    svg.addEventListener('contextmenu', function(e) {
         if (e.target.closest('#clippy-bubble')) return;
         e.preventDefault(); e.stopPropagation();
         showContextMenu(e.clientX, e.clientY, [
@@ -7899,11 +7902,11 @@ function _clippyInitDrag(wrap) {
             }}
         ]);
     });
-    wrap.addEventListener('mousedown', function(e){
+    svg.addEventListener('mousedown', function(e){
         if (e.target.closest('#clippy-bubble')) return;
         e.preventDefault();
         var sx = e.clientX, sy = e.clientY;
-        var rect = wrap.getBoundingClientRect();
+        var rect = svg.getBoundingClientRect();
         var ox = rect.left, oy = rect.top;
         wrap.style.right = ''; wrap.style.bottom = '';
         wrap.style.left = ox + 'px'; wrap.style.top = oy + 'px';
@@ -7986,7 +7989,7 @@ function showDeleteConfirm(msg, onConfirm) {
     const ok = document.createElement('button'); ok.className = 'xp-dialog-btn xp-dialog-btn-primary'; ok.textContent = 'Да';
     const cn = document.createElement('button'); cn.className = 'xp-dialog-btn'; cn.textContent = 'Нет';
     bd.appendChild(ok); bd.appendChild(cn); c.appendChild(msgEl); c.appendChild(bd);
-    wmCreate(winId, 'Подтверждение удаления', c, 320, 130, '\uD83D\uDDD1\uFE0F');
+    wmCreate(winId, 'Подтверждение удаления', c, 320, 130, xpIcon('delete',16));
     ok.addEventListener('click', function() { wmClose(winId); onConfirm(); });
     cn.addEventListener('click', function() { wmClose(winId); });
 }
@@ -8099,7 +8102,7 @@ function runStandardInit() {
         smAvatarEl.addEventListener('contextmenu', function(e) {
             e.preventDefault(); e.stopPropagation();
             showContextMenu(e.clientX, e.clientY, [
-                { icon: '👤', label: 'Изменить рисунок...', action: function(){ closeStartMenu(); openAvatarPicker(); } }
+                { icon: xpIcon('user',16), label: 'Изменить рисунок...', action: function(){ closeStartMenu(); openAvatarPicker(); } }
             ]);
         });
     }

@@ -20,17 +20,17 @@
         </button>
         <div id="taskbar-sep"></div>
         <div id="quick-launch">
-            <button class="ql-btn" id="ql-newtab"    title="Новая вкладка" aria-label="Новая вкладка">🌐</button>
-            <button class="ql-btn" id="ql-search"    title="Поиск" aria-label="Поиск">🔍</button>
-            <button class="ql-btn" id="ql-mycomputer"title="Мой компьютер" aria-label="Мой компьютер">💻</button>
-            <button class="ql-btn" id="ql-notepad"   title="Блокнот" aria-label="Блокнот">📝</button>
-            <button class="ql-btn" id="ql-sticky"    title="Стикер" aria-label="Стикер">📌</button>
+            <button class="ql-btn" id="ql-newtab"    title="Новая вкладка" aria-label="Новая вкладка"><img class="xp-icon-img" src="icons/16/internet.png" width="16" height="16" alt=""></button>
+            <button class="ql-btn" id="ql-search"    title="Поиск" aria-label="Поиск"><img class="xp-icon-img" src="icons/16/search.png" width="16" height="16" alt=""></button>
+            <button class="ql-btn" id="ql-mycomputer"title="Мой компьютер" aria-label="Мой компьютер"><img class="xp-icon-img" src="icons/16/my-computer.png" width="16" height="16" alt=""></button>
+            <button class="ql-btn" id="ql-notepad"   title="Блокнот" aria-label="Блокнот"><img class="xp-icon-img" src="icons/16/notepad.png" width="16" height="16" alt=""></button>
+            <button class="ql-btn" id="ql-sticky"    title="Стикер" aria-label="Стикер"><img class="xp-icon-img" src="icons/16/sticky.png" width="16" height="16" alt=""></button>
         </div>
         <div class="taskbar-sep-thin"></div>
         <div id="taskbar-windows"></div>
         <div id="systray" role="region" aria-label="Область уведомлений">
-            <div id="tray-update" title="Доступно обновление — нажмите для установки" class="hidden" role="button" aria-label="Доступно обновление">🔔</div>
-            <div id="tray-volume" title="Громкость" role="button" aria-label="Громкость">🔊</div>
+            <div id="tray-update" title="Доступно обновление — нажмите для установки" class="hidden" role="button" aria-label="Доступно обновление"><img class="xp-icon-img" src="icons/16/update.png" width="16" height="16" alt=""></div>
+            <div id="tray-volume" title="Громкость" role="button" aria-label="Громкость"><img class="xp-icon-img" src="icons/16/volume.png" width="16" height="16" alt=""></div>
             <div id="tray-clock" role="button" aria-label="Часы и календарь">
                 <div id="tray-time">00:00</div>
                 <div id="tray-date">дата</div>
@@ -57,14 +57,14 @@
             <div class="sm-left">
                 <!-- Pinned top items (icon + name + subtitle) -->
                 <div class="sm-pinned-item" data-action="search">
-                    <span class="sm-pinned-icon">&#127760;</span>
+                    <span class="sm-pinned-icon"><img class="xp-icon-img" src="icons/24/internet.png" width="24" height="24" alt=""></span>
                     <div>
                         <div class="sm-pinned-name">Интернет</div>
                         <div class="sm-pinned-sub">Поиск в интернете</div>
                     </div>
                 </div>
                 <div class="sm-pinned-item" data-action="notepad">
-                    <span class="sm-pinned-icon">&#128221;</span>
+                    <span class="sm-pinned-icon"><img class="xp-icon-img" src="icons/24/notepad.png" width="24" height="24" alt=""></span>
                     <div>
                         <div class="sm-pinned-name">Блокнот</div>
                         <div class="sm-pinned-sub">Текстовый редактор</div>
@@ -75,19 +75,19 @@
                 <!-- MRU programs (flex:1 — fills available space) -->
                 <div class="sm-mru">
                     <div class="sm-item" data-action="calculator">
-                        <span class="sm-icon">&#129518;</span>Калькулятор
+                        <span class="sm-icon"><img class="xp-icon-img" src="icons/16/calculator.png" width="16" height="16" alt=""></span>Калькулятор
                     </div>
                     <div class="sm-item" data-action="paint">
-                        <span class="sm-icon">&#127912;</span>Paint
+                        <span class="sm-icon"><img class="xp-icon-img" src="icons/16/paint.png" width="16" height="16" alt=""></span>Paint
                     </div>
                     <div class="sm-item" data-action="wordpad">
-                        <span class="sm-icon">&#128196;</span>WordPad
+                        <span class="sm-icon"><img class="xp-icon-img" src="icons/16/wordpad.png" width="16" height="16" alt=""></span>WordPad
                     </div>
                 </div>
                 <!-- All Programs — always at the bottom -->
                 <div class="sm-allprograms-bar">
                     <div class="sm-item sm-allprograms-btn" data-action="allprograms">
-                        <span class="sm-icon">&#128193;</span><span>Все программы</span>
+                        <span class="sm-icon"><img class="xp-icon-img" src="icons/16/folder.png" width="16" height="16" alt=""></span><span>Все программы</span>
                         <span class="sm-allprograms-arrow">&#9658;</span>
                     </div>
                 </div>
@@ -95,38 +95,38 @@
             <!-- Right column (system items, like XP) -->
             <div class="sm-right">
                 <div class="sm-item" data-action="notepad">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 1.5h6l3 3v10H3z"/><path d="M9 1.5v3h3"/></svg></span>Мои документы
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/my-documents.png" width="16" height="16" alt=""></span>Мои документы
                 </div>
                 <div class="sm-item" data-action="mycomputer">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="7" rx="1"/><path d="M6 11h4"/><path d="M5 13.5h6"/></svg></span>Мой компьютер
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/my-computer.png" width="16" height="16" alt=""></span>Мой компьютер
                 </div>
                 <div class="sm-item" data-action="recycle">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4.5h10v9H3z"/><path d="M6 2.5h4v2H6z"/><path d="M6.5 7v4"/><path d="M9.5 7v4"/></svg></span>Корзина
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/recycle-bin.png" width="16" height="16" alt=""></span>Корзина
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="settings">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.8"/><path d="M8 3v2"/><path d="M8 11v2"/><path d="M3 8h2"/><path d="M11 8h2"/></svg></span>Панель управления
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/control-panel.png" width="16" height="16" alt=""></span>Панель управления
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="search">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/></svg></span>Поиск
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/search.png" width="16" height="16" alt=""></span>Поиск
                 </div>
                 <div class="sm-item" data-action="run">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 3l9 5-9 5z"/></svg></span>Выполнить...
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/run.png" width="16" height="16" alt=""></span>Выполнить...
                 </div>
                 <div class="sm-item" data-action="taskmgr">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 13h12"/><path d="M4 13V9"/><path d="M8 13V5"/><path d="M12 13V7"/></svg></span>Диспетчер задач
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/taskmgr.png" width="16" height="16" alt=""></span>Диспетчер задач
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="export">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6h10v7H3z"/><path d="M8 3v7"/><path d="M5 5l3-3 3 3"/></svg></span>Экспорт данных
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/save.png" width="16" height="16" alt=""></span>Экспорт данных
                 </div>
                 <div class="sm-item" data-action="import">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6h10v7H3z"/><path d="M8 6v7"/><path d="M5 11l3 3 3-3"/></svg></span>Импорт данных
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/paste.png" width="16" height="16" alt=""></span>Импорт данных
                 </div>
                 <div class="sm-separator"></div>
                 <div class="sm-item" data-action="update">
-                    <span class="sm-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14 8a6 6 0 1 1-2-4.5"/><path d="M14 3v4h-4"/></svg></span>Обновление
+                    <span class="sm-icon"><img class="xp-icon-img" src="icons/16/update.png" width="16" height="16" alt=""></span>Обновление
                 </div>
             </div>
         </div>
@@ -225,7 +225,7 @@
                                 <div class="setup-inst-content-title">Персонализация</div>
                                 <div class="setup-inst-content-sub">Программа использует введённые данные для персонализации Nostalgic Startpage.</div>
                             </div>
-                            <div class="setup-inst-content-icon">👤</div>
+                            <div class="setup-inst-content-icon"><img class="xp-icon-img" src="icons/32/user.png" width="32" height="32" alt=""></div>
                         </div>
                         <div class="setup-inst-hdivider"></div>
                         <div class="setup-inst-content-body">
@@ -264,7 +264,7 @@
                                         <div class="setup-avatar-item" data-src="avatars/snowflake.bmp"><img src="avatars/snowflake.bmp" alt="snowflake"></div>
                                     </div>
                                     <label class="setup-avatar-browse" id="setup-avatar-browse-btn">
-                                        <span>🔍</span> Поиск рисунков...
+                                        <span><img class="xp-icon-img" src="icons/16/search.png" width="16" height="16" alt=""></span> Поиск рисунков...
                                         <input type="file" id="setup-avatar-upload" accept="image/*" style="display:none">
                                     </label>
                                 </div>
@@ -278,7 +278,7 @@
                                 <div class="setup-inst-content-title">Импорт закладок</div>
                                 <div class="setup-inst-content-sub">Программа может импортировать часто посещаемые сайты для быстрого доступа.</div>
                             </div>
-                            <div class="setup-inst-content-icon">🌐</div>
+                            <div class="setup-inst-content-icon"><img class="xp-icon-img" src="icons/32/internet.png" width="32" height="32" alt=""></div>
                         </div>
                         <div class="setup-inst-hdivider"></div>
                         <div class="setup-inst-content-body">
@@ -295,7 +295,7 @@
                                 <div class="setup-inst-content-title">Внешний вид</div>
                                 <div class="setup-inst-content-sub">Выберите режим отображения ярлыков на рабочем столе.</div>
                             </div>
-                            <div class="setup-inst-content-icon">🖥️</div>
+                            <div class="setup-inst-content-icon"><img class="xp-icon-img" src="icons/32/display.png" width="32" height="32" alt=""></div>
                         </div>
                         <div class="setup-inst-hdivider"></div>
                         <div class="setup-inst-content-body">
@@ -327,7 +327,7 @@
         <div class="avatar-picker-win">
             <div class="avatar-picker-titlebar">
                 <div class="avatar-picker-titlebar-left">
-                    <span class="avatar-picker-titlebar-icon">👤</span>
+                    <span class="avatar-picker-titlebar-icon"><img class="xp-icon-img" src="icons/16/user.png" width="16" height="16" alt=""></span>
                     <span id="avatar-picker-title">Выбор рисунка для учётной записи</span>
                 </div>
                 <div class="avatar-picker-close" id="avatar-picker-close" role="button" aria-label="Закрыть">✕</div>
@@ -335,7 +335,7 @@
             <div class="avatar-picker-body">
                 <p>Выбранный рисунок будет отображаться на экране приветствия.<br>
                 <label class="setup-avatar-browse" id="ap-browse-btn" style="display:inline-flex;margin-top:0">
-                    <span>🔍</span> Поиск рисунков...
+                    <span><img class="xp-icon-img" src="icons/16/search.png" width="16" height="16" alt=""></span> Поиск рисунков...
                     <input type="file" id="ap-avatar-upload" accept="image/*" style="display:none">
                 </label></p>
                 <div class="avatar-picker-grid" id="ap-avatar-grid" role="radiogroup" aria-label="Выбор аватара">
