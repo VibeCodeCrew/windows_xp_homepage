@@ -783,11 +783,12 @@ body {
 .search-btns { display: flex; gap: 6px; }
 
 /* System info */
-.sysinfo-window { padding: 16px; display: flex; flex-direction: column; gap: 8px; background: white; }
-.sysinfo-logo { font-size: 32px; line-height: 1; }
+.sysinfo-window { padding: 16px; display: flex; flex-direction: column; gap: 6px; background: white; }
+.sysinfo-head { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
 .sysinfo-title { font-size: 16px; font-weight: bold; color: #1050c8; }
 .sysinfo-edition { font-size: 12px; color: #666; }
 .sysinfo-hr { border: none; border-top: 1px solid #c0c0c0; margin: 4px 0; }
+.sysinfo-section-title { font-size: 12px; font-weight: bold; color: #1050c8; margin: 2px 0; }
 .sysinfo-row { font-size: 11px; color: #222; word-break: break-all; }
 
 /* Shutdown */

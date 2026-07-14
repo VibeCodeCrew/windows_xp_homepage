@@ -2674,7 +2674,7 @@ function startMenuAction(a) {
         case 'recycle':    openRecycleBin();  break;
         case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
         case 'update':     checkForUpdates(false); break;
-        case 'about':      openAbout(); break;
+        case 'about':      openSystemInfo(); break;
         case 'shutdown':   openShutdownDialog(); break;
         case 'logoff':     closeStartMenu(); openAvatarPicker(); break;
     }
@@ -3215,29 +3215,6 @@ function openMyComputer() {
     wmCreate('mycomputer','Мой компьютер',wrap,540,360, xpIcon('my-computer',16));
 }
 
-// ==================== ABOUT ====================
-function openAbout() {
-    if (wmWindows['about']) { wmRestore('about'); wmFocus('about'); return; }
-    var manifest = chrome.runtime.getManifest();
-    var c = document.createElement('div');
-    c.className = 'xp-about-wrap';
-    c.style.cssText = 'padding:16px;font-family:Tahoma,sans-serif;font-size:11px;color:#1a1a1a;line-height:1.5;';
-    c.innerHTML = [
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">',
-        '<img src="icons/48/help.png" width="48" height="48" alt="">',
-        '<div>',
-        '<div style="font-size:14px;font-weight:bold;">' + escapeHtml(manifest.name) + '</div>',
-        '<div style="color:#666;">Версия ' + escapeHtml(manifest.version) + '</div>',
-        '</div>',
-        '</div>',
-        '<p><b>Лицензия:</b> MIT License<br>',
-        '© 2026 VibeCodeCrew</p>',
-        '<p>Иконки основаны на <a href="https://github.com/marchmountain/-Windows-XP-High-Resolution-Icon-Pack" target="_blank" style="color:#0033cc;">Windows XP High Resolution Icon Pack</a> by marchmountain (CC0 1.0).</p>',
-        '<p style="color:#666;">Windows XP — торговая марка Microsoft Corporation.</p>'
-    ].join('');
-    wmCreate('about', 'О программе', c, 360, 220, xpIcon('help',16));
-}
-
 // ==================== BROWSER BOOKMARKS ====================
 function openBrowserBookmarks() {
     if (wmWindows['bkmarks']) { wmRestore('bkmarks'); wmFocus('bkmarks'); return; }
@@ -3703,14 +3680,36 @@ function openRecycleBin() {
 function openSystemInfo() {
     if (wmWindows['sysinfo']) { wmRestore('sysinfo'); wmFocus('sysinfo'); return; }
     const up=Math.floor((Date.now()-pageLoadTime)/1000);
+    const manifest = chrome.runtime.getManifest();
     const c=document.createElement('div'); c.className='sysinfo-window';
-    c.innerHTML='<div class="sysinfo-logo">\uD83E\uDE9F</div><div class="sysinfo-title">Microsoft Windows XP</div><div class="sysinfo-edition">Professional, Version 2002</div><hr class="sysinfo-hr">'+
-        '<div class="sysinfo-row"><b>Браузер:</b> '+escapeHtml(navigator.userAgent.substring(0,100))+'</div>'+
+    c.innerHTML='<div class="sysinfo-head">'+
+        '<img src="icons/48/my-computer.png" width="48" height="48" alt="">'+
+        '<div>'+
+        '<div class="sysinfo-title">'+escapeHtml(manifest.name)+'</div>'+
+        '<div class="sysinfo-edition">Версия '+escapeHtml(manifest.version)+'</div>'+
+        '<div class="sysinfo-edition">© 2026 VibeCodeCrew</div>'+
+        '</div></div>'+
+        '<hr class="sysinfo-hr">'+
+        '<div class="sysinfo-row"><b>Система:</b> Microsoft Windows XP Professional, Version 2002</div>'+
+        '<div class="sysinfo-row"><b>Браузер:</b> '+escapeHtml(navigator.userAgent.substring(0,120))+'</div>'+
         '<div class="sysinfo-row"><b>Разрешение:</b> '+screen.width+'\xD7'+screen.height+'</div>'+
         '<div class="sysinfo-row"><b>Окно:</b> '+window.innerWidth+'\xD7'+window.innerHeight+'</div>'+
         '<div class="sysinfo-row"><b>Аптайм страницы:</b> '+Math.floor(up/3600)+'ч '+Math.floor((up%3600)/60)+'м '+(up%60)+'с</div>'+
-        '<div class="sysinfo-row"><b>Ярлыков:</b> '+links.length+'</div>';
-    wmCreate('sysinfo','Свойства системы',c,430,290, xpIcon('my-computer',16));
+        '<div class="sysinfo-row"><b>Ярлыков:</b> '+links.length+'</div>'+
+        '<hr class="sysinfo-hr">'+
+        '<div class="sysinfo-section-title">Лицензия и авторство</div>'+
+        '<div class="sysinfo-row">Код аддона распространяется под лицензией MIT.</div>'+
+        '<div class="sysinfo-row">Иконки: <a href="https://github.com/marchmountain/-Windows-XP-High-Resolution-Icon-Pack" target="_blank" style="color:#0033cc;">Windows XP High Resolution Icon Pack</a> by marchmountain (CC0 1.0).</div>'+
+        '<div class="sysinfo-row">Windows XP — торговая марка Microsoft Corporation.</div>'+
+        '<div class="sysinfo-row" style="margin-top:4px;"><a href="https://github.com/VibeCodeCrew/windows_xp_homepage" target="_blank" style="color:#0033cc;">github.com/VibeCodeCrew/windows_xp_homepage</a></div>';
+    wmCreate('sysinfo','Свойства системы',c,480,290, xpIcon('my-computer',16));
+    setTimeout(function(){
+        const win = wmWindows['sysinfo'] && wmWindows['sysinfo'].el;
+        if (!win) return;
+        const content = win.querySelector('.xp-win-content');
+        if (!content) return;
+        wmResizeToContent('sysinfo', content.scrollWidth, content.scrollHeight, 480, 290, 640, Math.max(290, window.innerHeight - 100));
+    }, 0);
 }
 
 // ==================== SHUTDOWN ====================
