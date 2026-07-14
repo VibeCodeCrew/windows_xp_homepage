@@ -2674,6 +2674,7 @@ function startMenuAction(a) {
         case 'recycle':    openRecycleBin();  break;
         case 'export':     exportData();      break; case 'import':     document.getElementById('import-upload').click(); break;
         case 'update':     checkForUpdates(false); break;
+        case 'about':      openAbout(); break;
         case 'shutdown':   openShutdownDialog(); break;
         case 'logoff':     closeStartMenu(); openAvatarPicker(); break;
     }
@@ -3212,6 +3213,29 @@ function openMyComputer() {
     main.appendChild(drives);
     wrap.appendChild(sidebar); wrap.appendChild(main);
     wmCreate('mycomputer','Мой компьютер',wrap,540,360, xpIcon('my-computer',16));
+}
+
+// ==================== ABOUT ====================
+function openAbout() {
+    if (wmWindows['about']) { wmRestore('about'); wmFocus('about'); return; }
+    var manifest = chrome.runtime.getManifest();
+    var c = document.createElement('div');
+    c.className = 'xp-about-wrap';
+    c.style.cssText = 'padding:16px;font-family:Tahoma,sans-serif;font-size:11px;color:#1a1a1a;line-height:1.5;';
+    c.innerHTML = [
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">',
+        '<img src="icons/48/help.png" width="48" height="48" alt="">',
+        '<div>',
+        '<div style="font-size:14px;font-weight:bold;">' + escapeHtml(manifest.name) + '</div>',
+        '<div style="color:#666;">Версия ' + escapeHtml(manifest.version) + '</div>',
+        '</div>',
+        '</div>',
+        '<p><b>Лицензия:</b> MIT License<br>',
+        '© 2026 VibeCodeCrew</p>',
+        '<p>Иконки основаны на <a href="https://github.com/marchmountain/-Windows-XP-High-Resolution-Icon-Pack" target="_blank" style="color:#0033cc;">Windows XP High Resolution Icon Pack</a> by marchmountain (CC0 1.0).</p>',
+        '<p style="color:#666;">Windows XP — торговая марка Microsoft Corporation.</p>'
+    ].join('');
+    wmCreate('about', 'О программе', c, 360, 220, xpIcon('help',16));
 }
 
 // ==================== BROWSER BOOKMARKS ====================
