@@ -69,6 +69,7 @@ let trashedLinks = JSON.parse(localStorage.getItem(STORAGE.trash)) || [];
 let username     = localStorage.getItem(STORAGE.username) || 'User';
 let userAvatar   = localStorage.getItem(STORAGE.avatar)   || null;
 let selectedIndices = new Set();
+let selectedSysIds  = new Set(); // выделенные системные иконки (компьютер, корзина, DOOM)
 let minimizedTiles  = new Set(); // indices of tiles minimized to taskbar
 let minesweeperLosses = 0;
 
@@ -186,6 +187,7 @@ function selectIcon(index, ctrlKey) {
 
 function clearSelection() {
     selectedIndices.clear();
+    selectedSysIds.clear();
     updateSelectionUI();
 }
 
@@ -196,6 +198,10 @@ function updateSelectionUI() {
         el.classList.toggle('selected', sel);
         const xi = el.querySelector('.xp-icon');
         if (xi) xi.classList.toggle('selected', sel);
+    });
+    // Системные иконки — тоже участники выделения
+    document.querySelectorAll('.sys-icon').forEach(function(el) {
+        el.classList.toggle('selected', selectedSysIds.has(el.dataset.sysId));
     });
 }
 
@@ -791,6 +797,31 @@ function findFreePosition(x, y, w, h, excludeEls) {
 // ==================== DRAG (mouse-based free positioning) ====================
 let dragData = null;
 
+// Собрать элементы группового drag: выделенные ярлыки + выделенные системные иконки
+function collectGroupDragItems() {
+    const items = [];
+    document.querySelectorAll('.desktop-icon[data-index]').forEach(function(el) {
+        const idx = parseInt(el.dataset.index);
+        if (selectedIndices.has(idx) && links[idx]) {
+            items.push({
+                icon: el, item: links[idx], index: idx,
+                iconX: parseFloat(el.style.left) || 0,
+                iconY: parseFloat(el.style.top)  || 0,
+            });
+        }
+    });
+    document.querySelectorAll('.sys-icon').forEach(function(el) {
+        if (selectedSysIds.has(el.dataset.sysId)) {
+            items.push({
+                icon: el, sysId: el.dataset.sysId,
+                iconX: parseFloat(el.style.left) || 0,
+                iconY: parseFloat(el.style.top)  || 0,
+            });
+        }
+    });
+    return items;
+}
+
 function initIconDrag(icon, item, index) {
     icon.addEventListener('mousedown', function(e) {
         if (e.button !== 0) return;
@@ -805,20 +836,9 @@ function initIconDrag(icon, item, index) {
             updateSelectionUI();
         }
 
-        if (selectedIndices.size > 1) {
+        if (selectedIndices.size + selectedSysIds.size > 1) {
             // Multi-drag: use VISUAL (scaled) positions as drag start
-            const items = [];
-            document.querySelectorAll('.desktop-icon[data-index]').forEach(function(el) {
-                const idx = parseInt(el.dataset.index);
-                if (selectedIndices.has(idx) && links[idx]) {
-                    items.push({
-                        icon: el, item: links[idx], index: idx,
-                        iconX: parseFloat(el.style.left) || 0,
-                        iconY: parseFloat(el.style.top)  || 0,
-                    });
-                }
-            });
-            dragData = { multi: true, items: items, startX: e.clientX, startY: e.clientY, moved: false };
+            dragData = { multi: true, items: collectGroupDragItems(), startX: e.clientX, startY: e.clientY, moved: false };
         } else {
             dragData = {
                 multi: false, icon: icon, item: item, index: index,
@@ -903,7 +923,7 @@ document.addEventListener('mouseup', function(e) {
 
         // Helper: move all non-folder selected items into folder at fIdx
         function dropMultiIntoFolder(fIdx) {
-            const toMove = dd.items.filter(function(d) { return !d.item.isFolder; })
+            const toMove = dd.items.filter(function(d) { return d.item && !d.item.isFolder; })
                 .sort(function(a, b) { return b.index - a.index; });
             let adjFIdx = fIdx;
             toMove.forEach(function(d) {
@@ -960,7 +980,8 @@ document.addEventListener('mouseup', function(e) {
                     x = _gg.startX + Math.max(0, Math.round((x - _gg.startX) / _gg.cellW)) * _gg.cellW;
                     y = _gg.startY + Math.max(0, Math.round((y - _gg.startY) / _gg.cellH)) * _gg.cellH;
                 } else if (settings.snapToGrid) { const _sp = snapPos(x, y); x = _sp.x; y = _sp.y; }
-                d.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
+                if (d.sysId) saveSysIconPos(d.sysId, x, y, dw, dh);
+                else d.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
                 d.icon.style.left = x + 'px'; d.icon.style.top = y + 'px';
                 d.icon._wasDragged = true;
             });
@@ -2039,6 +2060,18 @@ function createSystemIcon(def, slotIndex) {
 
     icon.addEventListener('click', function(e) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
+        // Ctrl+клик — переключить выделение системной иконки, не открывая её
+        if (e.ctrlKey) {
+            if (selectedSysIds.has(def.id)) selectedSysIds.delete(def.id);
+            else selectedSysIds.add(def.id);
+            updateSelectionUI();
+            return;
+        }
+        // Обычный клик — выделить только эту иконку (как у ярлыков)
+        selectedIndices.clear();
+        selectedSysIds.clear();
+        selectedSysIds.add(def.id);
+        updateSelectionUI();
         if (!settings.doubleClickOpen) {
             if (def.id === 'mycomputer') openMyComputer();
             else if (def.id === 'recycle')  openRecycleBin();
@@ -2056,6 +2089,17 @@ function createSystemIcon(def, slotIndex) {
     // Drag (independent of links[] drag system)
     icon.addEventListener('mousedown', function(e) {
         if (e.button !== 0) return;
+        // Групповой drag: иконка в выделении и выделенных больше одной — двигаем всю группу
+        if (selectedSysIds.has(def.id) && (selectedIndices.size + selectedSysIds.size) > 1) {
+            e.preventDefault();
+            dragData = { multi: true, items: collectGroupDragItems(), startX: e.clientX, startY: e.clientY, moved: false };
+            const _desk = document.getElementById('desktop');
+            dragData._dw = _desk ? _desk.offsetWidth : 1200;
+            dragData._dh = _desk ? _desk.offsetHeight : 800;
+            dragData._folderIcons = Array.from(document.querySelectorAll('.desktop-icon.folder-icon'));
+            icon.style.zIndex = 999;
+            return;
+        }
         e.preventDefault();
         const startX = e.clientX, startY = e.clientY;
         // Use current visual (scaled) position as drag start
@@ -8837,6 +8881,7 @@ function runStandardInit() {
         const cRect = iconsContainer.getBoundingClientRect();
         const sx = e.clientX, sy = e.clientY;
         const preSelection = new Set(selectedIndices);
+        const preSelectionSys = new Set(selectedSysIds);
 
         const rb = document.createElement('div');
         rb.id = 'selection-rect';
@@ -8859,6 +8904,13 @@ function runStandardInit() {
                 if (isNaN(idx)) return;
                 const r = el.getBoundingClientRect();
                 if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) selectedIndices.add(idx);
+            });
+            // Системные иконки тоже захватываются рамкой
+            selectedSysIds.clear();
+            preSelectionSys.forEach(function(id) { selectedSysIds.add(id); });
+            document.querySelectorAll('.sys-icon').forEach(function(el) {
+                const r = el.getBoundingClientRect();
+                if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) selectedSysIds.add(el.dataset.sysId);
             });
             updateSelectionUI();
         }
