@@ -1,0 +1,45 @@
+/* ==================== DOOM (iframe-страница игры) ==================== */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#doom {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;       /* сохраняем пропорции кадра 4:3 при любом размере окна */
+    image-rendering: pixelated; /* пиксельная чёткость, как в 1993-м */
+    outline: none;
+}
+
+/* Оверлей загрузки / паузы поверх кадра игры */
+#doom-overlay {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 10px 22px;
+    background: rgba(0, 0, 0, 0.72);
+    border: 1px solid #555;
+    color: #e8e8e8;
+    font: 13px Tahoma, sans-serif;
+    text-align: center;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+}
+
+#doom-overlay[hidden] {
+    display: none;
+}

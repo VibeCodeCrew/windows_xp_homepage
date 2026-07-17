@@ -1517,6 +1517,7 @@ function createAddButton() { return null; }
 const SYSTEM_ICONS_DEF = [
     { id: 'mycomputer', name: 'Мой компьютер' },
     { id: 'recycle',    name: 'Корзина'        },
+    { id: 'doom',       name: 'DOOM'           },
 ];
 
 function getSysIconPos(id, slotIndex) {
@@ -1551,6 +1552,9 @@ function getSysIconSVG(id) {
     if (id === 'recycle') {
         return xpIcon(trashedLinks.length === 0 ? 'recycle-bin-empty' : 'recycle-bin', 48);
     }
+    if (id === 'doom') {
+        return xpIcon('doom', 48);
+    }
     return '';
 }
 
@@ -1571,12 +1575,14 @@ function createSystemIcon(def, slotIndex) {
         if (!settings.doubleClickOpen) {
             if (def.id === 'mycomputer') openMyComputer();
             else if (def.id === 'recycle')  openRecycleBin();
+            else if (def.id === 'doom')     openDoom();
         }
     });
     icon.addEventListener('dblclick', function(e) {
         if (settings.doubleClickOpen) {
             if (def.id === 'mycomputer') openMyComputer();
             else if (def.id === 'recycle')  openRecycleBin();
+            else if (def.id === 'doom')     openDoom();
         }
     });
 
@@ -2132,6 +2138,10 @@ function showSysIconContextMenu(x, y, id) {
             { label: 'Очистить корзину', icon: xpIcon('delete',16), danger: true,
               disabled: trashedLinks.length === 0,
               action: confirmEmptyTrash },
+        ]);
+    } else if (id === 'doom') {
+        showContextMenu(x, y, [
+            { label: 'Открыть', icon: xpIcon('doom',16), action: openDoom },
         ]);
     }
 }
@@ -2693,6 +2703,7 @@ function openAllPrograms() {
         { icon: xpIcon('solitaire',16),  name:'Косынка', action: function(){ closeStartMenu(); openSolitaire(); } },
         { icon: xpIcon('hearts',16),  name:'Червы',   action: function(){ closeStartMenu(); openHearts(); } },
         { icon: xpIcon('pinball',16), name:'Пинбол',  action: function(){ closeStartMenu(); openPinball(); } },
+        { icon: xpIcon('doom',16),    name:'DOOM',    action: function(){ closeStartMenu(); openDoom(); } },
     ];
     list.appendChild(makeFolderBlock('Игры', gameItems, false));
 
@@ -4805,6 +4816,19 @@ function openPinball() {
             }
         }, 0);
     }, 0);
+}
+
+// ==================== DOOM ====================
+function openDoom() {
+    if (wmWindows['doom']) { wmRestore('doom'); wmFocus('doom'); return; }
+    const c = document.createElement('div');
+    c.className = 'doom-window';
+    // Игра живёт в iframe: закрытие окна полностью выгружает WASM-инстанс,
+    // повторное открытие — чистый запуск с титульного экрана
+    c.innerHTML = '<iframe class="doom-frame" src="doom/index.html"></iframe>';
+    wmCreate('doom', 'DOOM', c, 664, 460, xpIcon('doom',16));
+    // Подгоняем окно точно под кадр игры 640x400 (при ресайзе canvas letterbox'ится сам)
+    wmResizeToContent('doom', 640, 400, 480, 300, 1600, 1200);
 }
 
 // ==================== SOLITAIRE (KOSYNKA / KLONDIKE) ====================

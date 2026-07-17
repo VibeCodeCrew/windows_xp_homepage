@@ -38,6 +38,7 @@ Nostalgic Startpage заменяет каждую новую вкладку бр
 | Косынка | Полноценная карточная игра |
 | Червы | 4 игрока с ИИ |
 | Пинбол | Физическая симуляция |
+| DOOM | WASM-порт классики 1993 года (shareware-эпизод), ярлык на рабочем столе; прогресс сохраняется автоматически |
 
 **Панель задач и системный трей**
 - Панель быстрого запуска (Новая вкладка, Поиск, Мой компьютер, Блокнот, Стикер)
@@ -137,6 +138,7 @@ Nostalgic Startpage turns every new browser tab into a nostalgic Windows XP desk
 | Solitaire (Klondike) | Full card game |
 | Hearts | 4-player AI |
 | Pinball | Physics-based |
+| DOOM | WebAssembly port of the 1993 classic (shareware episode), desktop shortcut; progress autosaves |
 
 **Taskbar & System Tray**
 - Quick Launch bar (New Tab, Search, My Computer, Notepad, Sticky Note)

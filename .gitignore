@@ -6,3 +6,9 @@ Windows XP Icons/
 
 # Project audit document
 XP_UX_UI_Audit_Report.docx
+
+# Dev-only DOOM savestate verification script
+doom_restore_test.mjs
+
+# Local source image for the DOOM icon (runtime uses scaled copies in icons/)
+doom.png
