@@ -1,0 +1,3 @@
+# Repo config files stay in git but out of release archives (git archive)
+.gitignore export-ignore
+.gitattributes export-ignore

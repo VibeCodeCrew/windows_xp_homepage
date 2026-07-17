@@ -29,6 +29,7 @@ const STORAGE = {
     doubleClickOpen:  'edge_double_click_open',
     theme:            'edge_theme',
     dockItems:        'edge_dock_items',
+    autoArrangeIcons: 'edge_auto_arrange',
 };
 
 const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
@@ -45,6 +46,19 @@ function getPosKey() {
 }
 // Snap size: icon-cell-sized in icon mode, 16px in glass mode, fine in tile mode
 function getSnap() { return settings.snapToGrid ? (settings.viewMode === 'icon' ? (settings.iconSize + 16) : (settings.viewMode === 'glass' ? 16 : SNAP_TILE)) : 1; }
+
+// ==================== CANONICAL GRID ====================
+// Единая сетка рабочего стола: размер ячейки — getSnap() по режиму,
+// начало координат — поле GRID_MARGIN (как у auto-arrange, MARGIN=10).
+// Этой сетке обязаны следовать и ярлыки, и системные иконки.
+const GRID_MARGIN = 10;
+function snapPos(x, y) {
+    const c = getSnap() || 1;
+    return {
+        x: GRID_MARGIN + Math.round((x - GRID_MARGIN) / c) * c,
+        y: GRID_MARGIN + Math.round((y - GRID_MARGIN) / c) * c,
+    };
+}
 
 // ==================== STATE ====================
 let links = JSON.parse(localStorage.getItem(STORAGE.tiles)) || [
@@ -78,6 +92,7 @@ let settings = {
     searchWidget:   localStorage.getItem(STORAGE.searchWidget) !== 'false',
     doubleClickOpen: localStorage.getItem(STORAGE.doubleClickOpen) === 'true',
     theme:          localStorage.getItem(STORAGE.theme) || 'xp', // 'xp' | 'macos'
+    autoArrangeIcons: localStorage.getItem(STORAGE.autoArrangeIcons) === 'true',
 };
 // Resolve tile size from preset if not manually set (or migrating from old horizontal defaults)
 (function() {
@@ -684,6 +699,58 @@ function autoArrange() {
     saveAndRender();
 }
 
+// Выровнять по сетке (одноразовое действие): каждую иконку прижать к ближайшей
+// свободной ячейке КАНОНИЧЕСКОЙ сетки, СОХРАНЯЯ визуальный порядок (сверху вниз,
+// слева направо). В отличие от autoArrange — не компактная перекладка по списку.
+// Имеет смысл только в режиме «Ярлыки» (единый размер иконок); в остальных — autoArrange.
+function alignToGrid() {
+    if (settings.viewMode !== 'icon') { autoArrange(); return; }
+    const desktopEl = document.getElementById('desktop');
+    const dw = desktopEl ? desktopEl.offsetWidth  : 1200;
+    const dh = desktopEl ? desktopEl.offsetHeight : 800;
+    const pk = getPosKey();
+    const cell = getSnap();
+
+    // Препятствия: системные иконки (компьютер, корзина, DOOM) занимают свои ячейки
+    const used = new Set();
+    document.querySelectorAll('.sys-icon').forEach(function(el) {
+        const l = parseFloat(el.style.left) || 0, t = parseFloat(el.style.top) || 0;
+        used.add(Math.round((l - GRID_MARGIN) / cell) + ':' + Math.round((t - GRID_MARGIN) / cell));
+    });
+
+    // Текущий визуальный порядок иконок
+    const order = links.map(function(item) {
+        return { item: item, pos: item[pk] || { x: 0, y: 0 } };
+    });
+    order.sort(function(a, b) { return (a.pos.y - b.pos.y) || (a.pos.x - b.pos.x); });
+
+    order.forEach(function(e) {
+        const dim = getIconDim(e.item);
+        const maxCx = Math.max(0, Math.floor((dw - GRID_MARGIN - dim.w) / cell));
+        const maxCy = Math.max(0, Math.floor((dh - GRID_MARGIN - dim.h) / cell));
+        const cx = Math.min(maxCx, Math.max(0, Math.round((e.pos.x - GRID_MARGIN) / cell)));
+        const cy = Math.min(maxCy, Math.max(0, Math.round((e.pos.y - GRID_MARGIN) / cell)));
+        // Ищем ближайшую свободную ячейку кольцами вокруг (cx, cy)
+        let best = null, bestD = Infinity;
+        for (let r = 0; r <= 60; r++) {
+            for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                const nx = cx + dx, ny = cy + dy;
+                if (nx < 0 || ny < 0 || nx > maxCx || ny > maxCy) continue;
+                const key = nx + ':' + ny;
+                if (used.has(key)) continue;
+                const d = dx * dx + dy * dy;
+                if (d < bestD) { bestD = d; best = { x: nx, y: ny }; }
+            }
+            if (best) break;
+        }
+        if (!best) best = { x: cx, y: cy };
+        used.add(best.x + ':' + best.y);
+        e.item[pk] = { x: GRID_MARGIN + best.x * cell, y: GRID_MARGIN + best.y * cell, dw: dw, dh: dh };
+    });
+    saveAndRender();
+}
+
 // ==================== ANTI-OVERLAP: find nearest free position ====================
 // Returns {x, y} at or near (x, y) that doesn't overlap any desktop icon.
 // excludeEls: Set of DOM elements to ignore (the ones being placed).
@@ -710,8 +777,9 @@ function findFreePosition(x, y, w, h, excludeEls) {
                 if (Math.abs(ox) < dist && Math.abs(oy) < dist) continue;
                 var nx = Math.max(0, Math.min(x + ox, dw - w));
                 var ny = Math.max(0, Math.min(y + oy, dh - h));
+                // Snap ДО проверки коллизии — иначе округлённая позиция могла налезть
+                if (settings.snapToGrid) { var _sp = snapPos(nx, ny); nx = Math.max(0, Math.min(_sp.x, dw - w)); ny = Math.max(0, Math.min(_sp.y, dh - h)); }
                 if (!collides(nx, ny)) {
-                    var _fs = getSnap(); if (settings.snapToGrid) { nx = Math.round(nx / _fs) * _fs; ny = Math.round(ny / _fs) * _fs; }
                     return { x: nx, y: ny };
                 }
             }
@@ -891,7 +959,7 @@ document.addEventListener('mouseup', function(e) {
                 if (_gg) {
                     x = _gg.startX + Math.max(0, Math.round((x - _gg.startX) / _gg.cellW)) * _gg.cellW;
                     y = _gg.startY + Math.max(0, Math.round((y - _gg.startY) / _gg.cellH)) * _gg.cellH;
-                } else if (settings.snapToGrid) { const _s1 = getSnap(); x = Math.round(x / _s1) * _s1; y = Math.round(y / _s1) * _s1; }
+                } else if (settings.snapToGrid) { const _sp = snapPos(x, y); x = _sp.x; y = _sp.y; }
                 d.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
                 d.icon.style.left = x + 'px'; d.icon.style.top = y + 'px';
                 d.icon._wasDragged = true;
@@ -927,7 +995,7 @@ document.addEventListener('mouseup', function(e) {
         const _gg = getGlassGrid(dw, dh);
         x = _gg.startX + Math.max(0, Math.round((x - _gg.startX) / _gg.cellW)) * _gg.cellW;
         y = _gg.startY + Math.max(0, Math.round((y - _gg.startY) / _gg.cellH)) * _gg.cellH;
-    } else { const _snap = getSnap(); if (settings.snapToGrid) { x = Math.round(x / _snap) * _snap; y = Math.round(y / _snap) * _snap; } }
+    } else if (settings.snapToGrid) { const _sp = snapPos(x, y); x = _sp.x; y = _sp.y; }
 
     // check folder drop (icon + open window)
     let intoFolder = false;
@@ -980,13 +1048,21 @@ document.addEventListener('mouseup', function(e) {
     }
 
     if (!intoFolder) {
-        const fp = findFreePosition(x, y, dd.icon.offsetWidth, dd.icon.offsetHeight, new Set([dd.icon]));
-        x = fp.x; y = fp.y;
-        dd.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
-        dd.icon.style.left = x + 'px'; dd.icon.style.top = y + 'px';
-        dd.icon.style.zIndex = '';
-        dd.icon._wasDragged = true;
-        saveLinks();
+        if (settings.autoArrangeIcons) {
+            // Режим «Упорядочить автоматически»: иконка встаёт в ближайшую ячейку сетки
+            dd.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
+            dd.icon.style.zIndex = '';
+            dd.icon._wasDragged = true;
+            alignToGrid();
+        } else {
+            const fp = findFreePosition(x, y, dd.icon.offsetWidth, dd.icon.offsetHeight, new Set([dd.icon]));
+            x = fp.x; y = fp.y;
+            dd.item[getPosKey()] = { x: x, y: y, dw: dw, dh: dh };
+            dd.icon.style.left = x + 'px'; dd.icon.style.top = y + 'px';
+            dd.icon.style.zIndex = '';
+            dd.icon._wasDragged = true;
+            saveLinks();
+        }
     }
 });
 
@@ -2009,7 +2085,7 @@ function createSystemIcon(def, slotIndex) {
                 let x = iX + dx, y = iY + dy;
                 x = Math.max(0, Math.min(x, dw - icon.offsetWidth));
                 y = Math.max(0, Math.min(y, dh - icon.offsetHeight));
-                if (settings.snapToGrid) { x = Math.round(x / SNAP_TILE) * SNAP_TILE; y = Math.round(y / SNAP_TILE) * SNAP_TILE; }
+                if (settings.snapToGrid) { const _sp = snapPos(x, y); x = _sp.x; y = _sp.y; }
                 saveSysIconPos(def.id, x, y, dw, dh);
                 icon.style.left = x + 'px'; icon.style.top = y + 'px';
                 icon._wasDragged = true;
@@ -2513,9 +2589,15 @@ function showDesktopContextMenu(x, y) {
         ]},
         { label: 'Вставить ярлык', icon: xpIcon('paste',16), action: function() { pasteUrl(null); } },
         'sep',
-        { label: (settings.snapToGrid ? '\u2713 ' : '') + 'Выровнять по сетке', icon: '\u22EE', action: function() {
+        { label: 'Привязка к сетке', icon: '\u22EE', check: settings.snapToGrid, action: function() {
             settings.snapToGrid = !settings.snapToGrid;
             localStorage.setItem(STORAGE.snapToGrid, settings.snapToGrid);
+        }},
+        { label: 'Выровнять по сетке', icon: '\u22EE', action: function() { alignToGrid(); } },
+        { label: 'Упорядочить автоматически', icon: '\u2630', check: settings.autoArrangeIcons, action: function() {
+            settings.autoArrangeIcons = !settings.autoArrangeIcons;
+            localStorage.setItem(STORAGE.autoArrangeIcons, settings.autoArrangeIcons);
+            if (settings.autoArrangeIcons) alignToGrid();
         }},
         { label: 'Упорядочить иконки', icon: '\u2630', action: function() { autoArrange(); } },
         { label: 'Обновить',           icon: xpIcon('update',16), action: function() { renderDesktop(); } },
