@@ -1389,6 +1389,10 @@ body {
 .doom-window { height:100%; background:#000; overflow:hidden; }
 .doom-frame { display:block; width:100%; height:100%; border:0; background:#000; }
 
+/* ==================== WEB APPS ==================== */
+.webapp-window { height:100%; display:flex; background:#fff; overflow:hidden; }
+.webapp-frame { flex:1; display:block; width:100%; height:100%; border:0; background:#fff; }
+
 /* ===================== QUICK LAUNCH ===================== */
 #quick-launch { display:flex; align-items:center; gap:1px; padding:0 4px; flex-shrink:0; }
 .ql-btn {
@@ -2073,3 +2077,283 @@ body {
 }
 .setup-nav-dot.active { background: #28cc28; border-color: #1a9a1a; }
 .setup-inst-nav-btns { display: flex; gap: 8px; }
+
+/* ===================== AQUA THEME (Mac OS X, 2001) ===================== */
+/* Скин включается через body[data-theme="macos"] (секция THEMES в script.js).
+   Только переопределения — базовая XP-тема не тронута. */
+
+/* ---------- Рабочий стол: начинается под строкой меню ---------- */
+body[data-theme="macos"] #desktop {
+    top: 26px;
+    height: calc(100vh - 26px);
+}
+
+/* ---------- Строка меню ---------- */
+body[data-theme="macos"] #mac-menubar {
+    position: fixed; top: 0; left: 0; right: 0; height: 26px;
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 10px;
+    background: linear-gradient(180deg, #fdfdfd 0%, #ececec 55%, #dcdcdc 100%);
+    border-bottom: 1px solid #9a9a9a;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.28);
+    z-index: 9000;
+    font-family: 'Lucida Grande', 'Segoe UI', Tahoma, sans-serif;
+    font-size: 13px; color: #1a1a1a;
+    user-select: none;
+}
+body[data-theme="macos"] .mb-item {
+    background: none; border: 0; border-radius: 4px;
+    font: inherit; color: inherit;
+    padding: 0 10px; height: 20px;
+    display: inline-flex; align-items: center;
+    cursor: default;
+}
+body[data-theme="macos"] .mb-item:hover {
+    background: linear-gradient(180deg, #5a8dee 0%, #3a6fd8 100%);
+    color: #fff;
+}
+body[data-theme="macos"] .mb-apple { padding: 0 8px; }
+body[data-theme="macos"] .mb-apple img { display: block; }
+body[data-theme="macos"] .mb-right { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+body[data-theme="macos"] .mb-clock { font-weight: 600; }
+body[data-theme="macos"] .mb-update img { display: block; }
+
+/* ---------- Dock (бывшая панель задач) ---------- */
+body[data-theme="macos"] #taskbar {
+    left: 50%; right: auto; bottom: 8px;
+    transform: translateX(-50%);
+    width: auto; max-width: 96vw;
+    height: auto; min-height: 0;
+    padding: 6px 10px;
+    gap: 4px;
+    border: 1px solid rgba(255,255,255,0.55);
+    border-top: 1px solid rgba(255,255,255,0.55);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(250,250,250,0.82) 0%, rgba(216,222,230,0.78) 50%, rgba(190,198,210,0.78) 100%);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.7);
+    backdrop-filter: blur(10px);
+}
+body[data-theme="macos"] #start-btn,
+body[data-theme="macos"] #taskbar-sep,
+body[data-theme="macos"] .taskbar-sep-thin,
+body[data-theme="macos"] #systray { display: none; }
+
+body[data-theme="macos"] #quick-launch { display: none; }
+
+/* Закреплённые приложения дока (свой редактируемый набор, не XP Quick Launch) */
+body[data-theme="macos"] #dock-pinned { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+body[data-theme="macos"] .dock-item {
+    width: 44px; height: 44px;
+    background: transparent; border: 1px solid transparent; border-radius: 8px;
+    cursor: pointer; padding: 0; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .08s ease-out, margin .08s ease-out;
+    transform-origin: bottom center;
+}
+body[data-theme="macos"] .dock-item img { width: 40px; height: 40px; image-rendering: auto; display: block; }
+body[data-theme="macos"] .dock-item:hover { background: rgba(255,255,255,0.35); }
+body[data-theme="macos"] .dock-item:active { background: rgba(0,0,0,0.12); }
+
+body[data-theme="macos"] #taskbar-windows {
+    flex: 0 0 auto; gap: 6px;
+    margin-left: 6px; padding-left: 8px;
+    border-left: 1px solid rgba(0,0,0,0.18);
+}
+body[data-theme="macos"] .taskbar-win-btn {
+    min-width: 0; width: 44px; height: 44px;
+    padding: 0; justify-content: center;
+    background: none; border: 0; border-radius: 8px;
+    box-shadow: none;
+    position: relative;
+    transition: transform .08s ease-out, margin .08s ease-out;
+    transform-origin: bottom center;
+    animation: none;
+}
+body[data-theme="macos"] .taskbar-win-btn:hover { background: rgba(255,255,255,0.35); }
+body[data-theme="macos"] .taskbar-win-btn.active { background: rgba(255,255,255,0.25); box-shadow: none; border: 0; }
+body[data-theme="macos"] .taskbar-btn-title { display: none; }
+body[data-theme="macos"] .taskbar-btn-icon { font-size: 34px; line-height: 1; }
+body[data-theme="macos"] .taskbar-btn-icon .xp-icon-img { width: 36px; height: 36px; image-rendering: auto; }
+/* Точка-индикатор запущенного приложения */
+body[data-theme="macos"] .taskbar-win-btn::after {
+    content: ''; position: absolute; bottom: -4px; left: 50%;
+    transform: translateX(-50%);
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #3a3a3a;
+}
+
+/* При входе курсора док разъезжается один раз на ширину, достаточную для
+   максимального зума любой иконки (44px * 1.9 ≈ 84px на иконку), — дальше
+   fish-eye работает только через transform и ничего не дёргается */
+body[data-theme="macos"] #taskbar.dock-hover .dock-item,
+body[data-theme="macos"] #taskbar.dock-hover .taskbar-win-btn {
+    margin-left: 15px;
+    margin-right: 15px;
+}
+
+/* ---------- Окна Aqua ---------- */
+body[data-theme="macos"] .xp-window {
+    border: 1px solid #6a6a6a;
+    border-radius: 8px 8px 6px 6px;
+    background: #ededed;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+}
+body[data-theme="macos"] .xp-titlebar {
+    position: relative;
+    background-image:
+        repeating-linear-gradient(180deg, rgba(0,0,0,0.045) 0px, rgba(0,0,0,0.045) 1px, transparent 1px, transparent 3px),
+        linear-gradient(180deg, #f8f8f8 0%, #e2e2e2 50%, #d0d0d0 100%);
+    border-bottom: 1px solid #9a9a9a;
+    border-radius: 7px 7px 0 0;
+    min-height: 26px;
+    padding: 3px 8px;
+}
+body[data-theme="macos"] .xp-window.inactive .xp-titlebar {
+    background-image:
+        repeating-linear-gradient(180deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 3px),
+        linear-gradient(180deg, #f2f2f2 0%, #e4e4e4 100%);
+}
+body[data-theme="macos"] .xp-titlebar-icon { display: none; }
+body[data-theme="macos"] .xp-titlebar-title {
+    position: absolute; left: 64px; right: 64px;
+    color: #2a2a2a; text-shadow: none;
+    font-family: 'Lucida Grande', 'Segoe UI', Tahoma, sans-serif;
+    font-size: 13px; font-weight: 600;
+    text-align: center;
+}
+body[data-theme="macos"] .xp-window.inactive .xp-titlebar-title { color: #7a7a7a; }
+
+/* Светофор слева: close, min, max */
+body[data-theme="macos"] .xp-win-btns { order: -1; gap: 5px; margin-right: 4px; }
+body[data-theme="macos"] .xp-btn {
+    width: 13px; height: 13px; border-radius: 50%;
+    font-size: 9px; color: transparent; /* символы проявляются при наведении на панель */
+    border: 1px solid rgba(0,0,0,0.22);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.65), inset 0 -1px 1px rgba(0,0,0,0.12);
+    padding: 0;
+}
+body[data-theme="macos"] .xp-btn-close { order: 1; background: radial-gradient(circle at 35% 30%, #ff9a8a 0%, #f0503c 45%, #c02418 100%); }
+body[data-theme="macos"] .xp-btn-min   { order: 2; background: radial-gradient(circle at 35% 30%, #ffe28a 0%, #f5b82e 45%, #d18e10 100%); }
+body[data-theme="macos"] .xp-btn-max   { order: 3; background: radial-gradient(circle at 35% 30%, #a8e888 0%, #4fc038 45%, #2a9418 100%); }
+body[data-theme="macos"] .xp-titlebar:hover .xp-btn { color: rgba(0,0,0,0.55); }
+body[data-theme="macos"] .xp-btn-close:hover,
+body[data-theme="macos"] .xp-btn-min:hover,
+body[data-theme="macos"] .xp-btn-max:hover { filter: brightness(1.12); }
+body[data-theme="macos"] .xp-window.inactive .xp-btn-close,
+body[data-theme="macos"] .xp-window.inactive .xp-btn-min,
+body[data-theme="macos"] .xp-window.inactive .xp-btn-max {
+    background: radial-gradient(circle at 35% 30%, #e2e2e2 0%, #c4c4c4 50%, #a8a8a8 100%);
+}
+body[data-theme="macos"] .xp-win-content { background: #fff; }
+
+/* ---------- Мини-окна режима «Миниатюры» ---------- */
+body[data-theme="macos"] .xp-tile-window {
+    border: 1px solid #6a6a6a;
+    border-radius: 7px;
+    background: #ededed;
+}
+body[data-theme="macos"] .xp-tile-window:hover { outline: 2px solid rgba(90,141,238,0.7); }
+body[data-theme="macos"] .tile-titlebar {
+    background-image:
+        repeating-linear-gradient(180deg, rgba(0,0,0,0.045) 0px, rgba(0,0,0,0.045) 1px, transparent 1px, transparent 3px),
+        linear-gradient(180deg, #f8f8f8 0%, #dcdcdc 100%);
+    border-bottom: 1px solid #a8a8a8;
+    border-radius: 6px 6px 0 0;
+}
+body[data-theme="macos"] .tile-titlebar:hover {
+    background-image:
+        repeating-linear-gradient(180deg, rgba(0,0,0,0.045) 0px, rgba(0,0,0,0.045) 1px, transparent 1px, transparent 3px),
+        linear-gradient(180deg, #ffffff 0%, #e8e8e8 100%);
+}
+body[data-theme="macos"] .tile-name { color: #2a2a2a; text-shadow: none; font-weight: 600; }
+body[data-theme="macos"] .tile-btn { border-radius: 50%; width: 11px; height: 11px; font-size: 7px; color: transparent; border: 1px solid rgba(0,0,0,0.22); }
+body[data-theme="macos"] .tile-btn-close { background: radial-gradient(circle at 35% 30%, #ff9a8a 0%, #f0503c 45%, #c02418 100%); }
+body[data-theme="macos"] .tile-btn-min,
+body[data-theme="macos"] .tile-btn-max { background: radial-gradient(circle at 35% 30%, #e2e2e2 0%, #b8b8b8 50%, #989898 100%); }
+body[data-theme="macos"] .tile-titlebar:hover .tile-btn { color: rgba(0,0,0,0.55); }
+
+/* ---------- Ярлыки рабочего стола (стиль Finder) ---------- */
+body[data-theme="macos"] .xp-icon:hover { background: rgba(90,141,238,0.22); outline: 1px solid rgba(90,141,238,0.55); }
+body[data-theme="macos"] .xp-icon.selected { background: rgba(90,141,238,0.28); outline: 1px solid rgba(58,111,216,0.8); }
+body[data-theme="macos"] .xp-icon-label {
+    color: #1a1a1a;
+    text-shadow: none;
+    background: rgba(255,255,255,0.78);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+body[data-theme="macos"] .xp-icon:hover .xp-icon-label,
+body[data-theme="macos"] .xp-icon.selected .xp-icon-label {
+    background: #3a6fd8;
+    color: white;
+    -webkit-text-fill-color: white;
+}
+body[data-theme="macos"] #selection-rect {
+    background: rgba(90,141,238,0.18) !important;
+    border-color: rgba(58,111,216,0.8) !important;
+}
+
+/* ---------- Меню «Пуск» → меню из строки меню ---------- */
+body[data-theme="macos"] #start-menu {
+    bottom: auto; top: 28px; left: 4px;
+    width: 400px;
+    border: 1px solid #8a8a8a; border-radius: 0 8px 8px 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    font-family: 'Lucida Grande', 'Segoe UI', Tahoma, sans-serif;
+}
+body[data-theme="macos"] .sm-header {
+    background: linear-gradient(180deg, #f4f4f4 0%, #dcdcdc 100%);
+    border-bottom: 1px solid #b0b0b0;
+}
+body[data-theme="macos"] .sm-username { color: #1a1a1a; text-shadow: none; }
+body[data-theme="macos"] .sm-item:hover,
+body[data-theme="macos"] .sm-pinned-item:hover,
+body[data-theme="macos"] .sm-allprograms-btn:hover {
+    background: linear-gradient(180deg, #5a8dee 0%, #3a6fd8 100%);
+    color: #fff;
+}
+body[data-theme="macos"] .sm-item:hover .sm-pinned-sub,
+body[data-theme="macos"] .sm-pinned-item:hover .sm-pinned-sub { color: #dce8ff; }
+body[data-theme="macos"] .sm-footer {
+    background: linear-gradient(180deg, #f4f4f4 0%, #dcdcdc 100%);
+    border-top: 1px solid #b0b0b0;
+}
+
+/* ---------- Контекстные меню и выпадашки ---------- */
+body[data-theme="macos"] .xp-context-menu,
+body[data-theme="macos"] .xp-submenu {
+    border: 1px solid #9a9a9a; border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    padding: 3px 0;
+    font-family: 'Lucida Grande', 'Segoe UI', Tahoma, sans-serif;
+    font-size: 13px;
+}
+body[data-theme="macos"] .xp-ctx-item { padding: 3px 20px 3px 10px; }
+body[data-theme="macos"] .xp-ctx-item:hover { background: linear-gradient(180deg, #5a8dee 0%, #3a6fd8 100%); color: #fff; }
+body[data-theme="macos"] .xp-ctx-separator { background: #d8d8d8; margin: 3px 8px; height: 1px; }
+
+/* ---------- Календарь: из правого верхнего угла ---------- */
+body[data-theme="macos"] .xp-calendar {
+    bottom: auto; top: 28px; right: 10px;
+    border-radius: 6px;
+}
+
+/* ---------- Гелевые кнопки ---------- */
+body[data-theme="macos"] .xp-dialog-btn {
+    border-radius: 12px;
+    border: 1px solid #8a8a8a;
+    background: linear-gradient(180deg, #ffffff 0%, #e8e8e8 50%, #d0d0d0 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 1px 2px rgba(0,0,0,0.15);
+}
+body[data-theme="macos"] .xp-dialog-btn:hover {
+    background: linear-gradient(180deg, #ffffff 0%, #dceafe 50%, #b8d4f8 100%);
+    border-color: #3a6fd8;
+}
+body[data-theme="macos"] .xp-dialog-btn:active {
+    background: linear-gradient(180deg, #c8d8f0 0%, #dceafe 100%);
+    box-shadow: inset 1px 1px 2px rgba(0,0,0,0.2);
+}
+body[data-theme="macos"] .xp-dialog-btn-primary {
+    border: 1px solid #3a6fd8;
+    background: linear-gradient(180deg, #e8f0fe 0%, #b8d0f4 50%, #8ab0e8 100%);
+}

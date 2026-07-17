@@ -27,6 +27,8 @@ const STORAGE = {
     searchWidget:     'edge_search_widget',
     searchWidgetPos:  'edge_search_widget_pos',
     doubleClickOpen:  'edge_double_click_open',
+    theme:            'edge_theme',
+    dockItems:        'edge_dock_items',
 };
 
 const SNAP_TILE = 10;  // tile/window mode: fine-grid snap (px)
@@ -75,6 +77,7 @@ let settings = {
     searchEngine:   localStorage.getItem(STORAGE.searchEngine) || 'ya',
     searchWidget:   localStorage.getItem(STORAGE.searchWidget) !== 'false',
     doubleClickOpen: localStorage.getItem(STORAGE.doubleClickOpen) === 'true',
+    theme:          localStorage.getItem(STORAGE.theme) || 'xp', // 'xp' | 'macos'
 };
 // Resolve tile size from preset if not manually set (or migrating from old horizontal defaults)
 (function() {
@@ -506,6 +509,10 @@ function updateClock() {
     const te = document.getElementById('tray-time'), de = document.getElementById('tray-date');
     if (te) te.textContent = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     if (de) de.textContent = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    // Часы меню-бара (тема macos): «Пт 17:42»
+    const mb = document.getElementById('mb-time');
+    if (mb) mb.textContent = now.toLocaleDateString('ru-RU', { weekday: 'short' }).replace('.', '') + ' ' +
+        now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ==================== SOUNDS ====================
@@ -896,6 +903,23 @@ document.addEventListener('mouseup', function(e) {
 
     // Single drag
     dd.icon.classList.remove('dragging');
+
+    // Drop в Dock (тема macos): прикрепить ярлык к доку, иконку вернуть на место
+    if (settings.theme === 'macos' && !dd.item.isFolder) {
+        const tb = document.getElementById('taskbar');
+        if (tb) {
+            const tr = tb.getBoundingClientRect();
+            if (e.clientX >= tr.left && e.clientX <= tr.right && e.clientY >= tr.top && e.clientY <= tr.bottom) {
+                dd.icon.style.left = dd.iconX + 'px';
+                dd.icon.style.top  = dd.iconY + 'px';
+                dd.icon.style.zIndex = '';
+                dd.icon._wasDragged = true; // погасить click после дропа
+                addUrlToDock(dd.item.url, dd.item.name);
+                return;
+            }
+        }
+    }
+
     let x = dd.iconX + dx, y = dd.iconY + dy;
     x = Math.max(0, Math.min(x, dw - dd.icon.offsetWidth));
     y = Math.max(0, Math.min(y, dh - dd.icon.offsetHeight));
@@ -977,11 +1001,368 @@ function applyGlassOpacity() {
     document.documentElement.style.setProperty('--icon-img', Math.round(sz * 0.4) + 'px');
 }
 
+// ==================== THEMES ====================
+// Тема оформления: 'xp' (по умолчанию) или 'macos' (Mac OS X Aqua).
+// Тема — это скин: body[data-theme] + CSS-блок в конце style.css + меню-бар.
+// Вся логика (окна, ярлыки, приложения) от темы не зависит.
+
+function applyTheme() {
+    document.body.dataset.theme = settings.theme;
+    applyBackground();
+    if (settings.theme === 'macos') {
+        ensureMacMenuBar();
+        renderDockPinned();
+        initDockMagnify();
+    } else {
+        removeMacMenuBar();
+        removeDockPinned();
+        // Сбросить fish-eye: трансформации иконок и растянутое состояние дока
+        const tb = document.getElementById('taskbar');
+        if (tb) tb.classList.remove('dock-hover');
+        document.querySelectorAll('#taskbar .ql-btn, #taskbar .taskbar-win-btn, #taskbar .dock-item').forEach(function(ic) {
+            ic.style.transform = '';
+        });
+    }
+    // Иконки уже открытых окон пересобираем под тему (mac-набор в доке, 16px в XP)
+    Object.keys(wmWindows).forEach(function(id) {
+        const btn = wmWindows[id].taskbarBtn;
+        if (!btn) return;
+        const span = btn.querySelector('.taskbar-btn-icon');
+        if (!span) return;
+        if (settings.theme === 'macos' && DOCK_APPS[id]) {
+            span.innerHTML = '<img class="xp-icon-img" src="' + macDockIconSrc(id) + '" width="16" height="16" alt="">';
+        } else if (DOCK_APPS[id]) {
+            span.innerHTML = xpIcon(DOCK_APPS[id].icon, 16);
+        } else {
+            const img = span.querySelector('img.xp-icon-img');
+            if (img) img.src = img.src.replace(
+                settings.theme === 'macos' ? 'icons/16/' : 'icons/64/',
+                settings.theme === 'macos' ? 'icons/64/' : 'icons/16/');
+        }
+    });
+}
+
+// Переключение темы (настройки, меню-бар, OOBE)
+function setTheme(theme) {
+    settings.theme = theme;
+    localStorage.setItem(STORAGE.theme, theme);
+    applyTheme();
+    renderDesktop(); // область десктопа меняется (меню-бар сверху) — пересчитать пропорции
+}
+
+// Переключение режима вида из меню-бара
+function setViewMode(mode) {
+    settings.viewMode = mode;
+    localStorage.setItem(STORAGE.viewMode, mode);
+    renderDesktop();
+}
+
+// ---- Строка меню Mac OS X (существует только в теме macos) ----
+
+function ensureMacMenuBar() {
+    if (document.getElementById('mac-menubar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'mac-menubar';
+
+    // «Яблочное» меню: Mac-меню, не XP «Пуск»
+    const apple = document.createElement('button');
+    apple.className = 'mb-item mb-apple';
+    apple.innerHTML = '<img src="icons/mac/apple.png" width="16" height="16" alt="">';
+    apple.title = 'Меню';
+    apple.setAttribute('aria-label', 'Меню');
+    apple.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const r = apple.getBoundingClientRect();
+        showContextMenu(r.left, r.bottom + 2, [
+            { label: 'Об этом компьютере', action: openSystemInfo },
+            { label: 'Обновление ПО…', action: function() {
+                if (_updateAvail) openUpdateDialog(_updateAvail.current, _updateAvail.remote);
+                else checkForUpdates(false);
+            } },
+            { label: 'Системные настройки…', action: openSettings },
+            'sep',
+            { label: 'Программы', submenu: [
+                { label: 'Сапёр',    icon: macIcon16('minesweeper'), action: openMinesweeper },
+                { label: 'Косынка',  icon: macIcon16('solitaire'),   action: openSolitaire },
+                { label: 'Червы',    icon: macIcon16('hearts'),      action: openHearts },
+                { label: 'Пинбол',   icon: macIcon16('pinball'),     action: openPinball },
+                { label: 'DOOM',     icon: macIcon16('doom'),        action: openDoom },
+                'sep',
+                { label: 'Блокнот',  icon: macIcon16('notepad'),     action: openNotepad },
+                { label: 'WordPad',  icon: macIcon16('wordpad'),     action: openWordPad },
+                { label: 'Paint',    icon: macIcon16('paint'),       action: openPaint },
+                { label: 'Калькулятор', icon: macIcon16('calculator'), action: openCalculator },
+                { label: 'Командная строка', icon: macIcon16('cmd'), action: openCmd },
+                { label: 'Стикер',   icon: macIcon16('stickies'),    action: function(){ createSticky(); } },
+            ] },
+            'sep',
+            { label: 'Завершить принудительно…', action: openTaskManager },
+            'sep',
+            { label: 'Сон', action: startScreensaver },
+            { label: 'Завершение работы…', action: openShutdownDialog },
+        ]);
+    });
+    bar.appendChild(apple);
+
+    // Меню «Вид» — реальные переключатели режимов и темы
+    const view = document.createElement('button');
+    view.className = 'mb-item';
+    view.textContent = 'Вид';
+    view.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const r = view.getBoundingClientRect();
+        showContextMenu(r.left, r.bottom + 2, [
+            { label: 'Плитки',    action: function(){ setViewMode('glass');  } },
+            { label: 'Миниатюры', action: function(){ setViewMode('window'); } },
+            { label: 'Ярлыки',    action: function(){ setViewMode('icon');   } },
+            'sep',
+            { label: 'Тема: Windows XP', action: function(){ setTheme('xp'); } },
+        ]);
+    });
+    bar.appendChild(view);
+
+    // Меню «Окно» — динамический список открытых окон
+    const win = document.createElement('button');
+    win.className = 'mb-item';
+    win.textContent = 'Окно';
+    win.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const r = win.getBoundingClientRect();
+        const ids = Object.keys(wmWindows);
+        const items = ids.length
+            ? ids.map(function(id) {
+                const tEl = wmWindows[id].el.querySelector('.xp-titlebar-title');
+                return { label: (tEl && tEl.textContent) || id,
+                         action: function(){ wmRestore(id); wmFocus(id); } };
+              })
+            : [{ label: 'Нет окон', disabled: true, action: function(){} }];
+        showContextMenu(r.left, r.bottom + 2, items);
+    });
+    bar.appendChild(win);
+
+    // Правая часть: индикатор обновления + часы
+    const right = document.createElement('div');
+    right.className = 'mb-right';
+
+    const upd = document.createElement('span');
+    upd.className = 'mb-item mb-update hidden';
+    upd.id = 'mb-update';
+    upd.title = 'Доступно обновление — нажмите для установки';
+    upd.innerHTML = xpIcon('update', 16);
+    if (_updateAvail) upd.classList.remove('hidden');
+    upd.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (_updateAvail) openUpdateDialog(_updateAvail.current, _updateAvail.remote);
+        else checkForUpdates(false);
+    });
+    right.appendChild(upd);
+
+    const clock = document.createElement('span');
+    clock.className = 'mb-item mb-clock';
+    clock.id = 'mb-time';
+    clock.title = 'Календарь';
+    clock.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleCalendar();
+    });
+    right.appendChild(clock);
+
+    bar.appendChild(right);
+    document.body.appendChild(bar);
+    updateClock(); // сразу показать время в меню-баре
+}
+
+function removeMacMenuBar() {
+    const bar = document.getElementById('mac-menubar');
+    if (bar) bar.remove();
+}
+
+// ---- Fish-eye увеличение иконок дока (только тема macos) ----
+
+var _dockMagnifyBound = false;
+function initDockMagnify() {
+    if (_dockMagnifyBound) return;
+    _dockMagnifyBound = true;
+    document.addEventListener('mousemove', function(e) {
+        if (settings.theme !== 'macos') return;
+        const tb = document.getElementById('taskbar');
+        if (!tb) return;
+        const over = tb.contains(e.target);
+        // Док разъезжается ОДИН раз при входе курсора (класс .dock-hover задаёт
+        // фиксированные отступы, достаточные для максимального зума), а дальше
+        // иконки меняют только transform — раскладка статична, подёргивания нет
+        tb.classList.toggle('dock-hover', over);
+        const icons = tb.querySelectorAll('.ql-btn, .taskbar-win-btn, .dock-item');
+        icons.forEach(function(ic) {
+            let s = 1;
+            if (over) {
+                const r = ic.getBoundingClientRect();
+                const dx = Math.abs(e.clientX - (r.left + r.width / 2));
+                if (dx < 150) s = 1 + 0.9 * (1 - dx / 150);
+            }
+            ic.style.transform = s === 1 ? '' : 'scale(' + s.toFixed(3) + ')';
+        });
+    });
+}
+
+// ---- Dock: редактируемый набор закреплённых приложений (тема macos) ----
+// Не путаем с XP Quick Launch: это отдельный список в localStorage.
+
+var DOCK_APPS = {
+    mycomputer:  { name: 'Мой компьютер',    icon: 'my-computer',   action: function(){ openMyComputer(); } },
+    internet:    { name: 'Интернет',         icon: 'internet',      action: function(){ chrome.tabs.create({}); } },
+    search:      { name: 'Поиск',            icon: 'search',        action: function(){ openSearch(); } },
+    notepad:     { name: 'Блокнот',          icon: 'notepad',       action: function(){ openNotepad(); } },
+    wordpad:     { name: 'WordPad',          icon: 'wordpad',       action: function(){ openWordPad(); } },
+    paint:       { name: 'Paint',            icon: 'paint',         action: function(){ openPaint(); } },
+    calculator:  { name: 'Калькулятор',      icon: 'calculator',    action: function(){ openCalculator(); } },
+    cmd:         { name: 'Командная строка', icon: 'cmd',           action: function(){ openCmd(); } },
+    minesweeper: { name: 'Сапёр',            icon: 'minesweeper',   action: function(){ openMinesweeper(); } },
+    solitaire:   { name: 'Косынка',          icon: 'solitaire',     action: function(){ openSolitaire(); } },
+    hearts:      { name: 'Червы',            icon: 'hearts',        action: function(){ openHearts(); } },
+    pinball:     { name: 'Пинбол',           icon: 'pinball',       action: function(){ openPinball(); } },
+    doom:        { name: 'DOOM',             icon: 'doom',          action: function(){ openDoom(); } },
+    stickies:    { name: 'Стикер',           icon: 'sticky',        action: function(){ createSticky(); } },
+    recycle:     { name: 'Корзина',          icon: 'recycle-bin',   action: function(){ openRecycleBin(); } },
+    settings:    { name: 'Настройки',        icon: 'control-panel', action: function(){ openSettings(); } },
+};
+var DOCK_DEFAULT = ['mycomputer', 'internet', 'notepad', 'paint', 'calculator', 'minesweeper', 'doom', 'recycle'];
+
+// Путь к mac-иконке приложения (набор Cheetah, GPL-3.0 — см. THIRD_PARTY.md).
+// У DOOM своя обложка, корзина — по наполнению.
+function macDockIconSrc(id) {
+    if (id === 'doom') return 'icons/64/doom.png';
+    if (id === 'recycle') return 'icons/mac/' + (trashedLinks.length === 0 ? 'trash-empty' : 'trash-full') + '.png';
+    return 'icons/mac/' + id + '.png';
+}
+
+// mac-иконка произвольного размера (html) для меню и проводников
+function macIcon(id, size) {
+    return '<img class="xp-icon-img" src="' + macDockIconSrc(id) + '" width="' + size + '" height="' + size + '" alt="">';
+}
+// 16px mac-иконка (html) для пунктов меню
+function macIcon16(id) {
+    return macIcon(id, 16);
+}
+
+// Элемент дока: строка — id приложения из DOCK_APPS, объект {url,name} — ярлык сайта
+function getDockItems() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(STORAGE.dockItems));
+        if (Array.isArray(arr)) return arr.filter(function(it) {
+            return (typeof it === 'string' && DOCK_APPS[it]) ||
+                   (it && typeof it === 'object' && typeof it.url === 'string');
+        });
+    } catch(e) {}
+    return DOCK_DEFAULT.slice();
+}
+function saveDockItems(items) {
+    localStorage.setItem(STORAGE.dockItems, JSON.stringify(items));
+}
+
+function dockHasUrl(url) {
+    return getDockItems().some(function(it){ return typeof it === 'object' && it.url === url; });
+}
+
+// Прикрепить ярлык сайта к доку (контекстное меню ярлыка, drag&drop в док)
+function addUrlToDock(url, name) {
+    if (dockHasUrl(url)) return false;
+    const items = getDockItems();
+    items.push({ url: url, name: name || url });
+    saveDockItems(items);
+    renderDockPinned();
+    return true;
+}
+
+// Рендер закреплённых иконок дока; #quick-launch (XP) не трогаем — он просто скрыт CSS
+function renderDockPinned() {
+    const tb = document.getElementById('taskbar');
+    if (!tb) return;
+    let dock = document.getElementById('dock-pinned');
+    if (!dock) {
+        dock = document.createElement('div');
+        dock.id = 'dock-pinned';
+        tb.insertBefore(dock, document.getElementById('taskbar-windows') || null);
+    }
+    dock.innerHTML = '';
+    getDockItems().forEach(function(entry) {
+        const isApp = typeof entry === 'string';
+        const app  = isApp ? DOCK_APPS[entry] : null;
+        const name = isApp ? app.name : entry.name;
+        const openFn = isApp ? app.action : function(){ window.open(entry.url, '_blank'); };
+        const removeFn = function() {
+            saveDockItems(getDockItems().filter(function(x) {
+                return isApp ? x !== entry : !(typeof x === 'object' && x.url === entry.url);
+            }));
+            renderDockPinned();
+        };
+        const b = document.createElement('button');
+        b.className = 'dock-item';
+        b.title = name;
+        b.setAttribute('aria-label', name);
+        if (isApp) {
+            b.innerHTML = '<img src="' + macDockIconSrc(entry) + '" width="40" height="40" alt="">';
+            b.dataset.app = entry;
+        } else {
+            // Ярлык сайта: фавикон, фолбэк — стандартная иконка
+            const img = document.createElement('img');
+            img.width = 40; img.height = 40; img.alt = '';
+            img.src = getFaviconUrl(entry.url) || 'icons/64/internet-shortcut.png';
+            img.onerror = function() { img.onerror = null; img.src = 'icons/64/internet-shortcut.png'; };
+            b.appendChild(img);
+        }
+        b.addEventListener('click', openFn);
+        b.addEventListener('contextmenu', function(e) {
+            e.preventDefault(); e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, [
+                { label: 'Открыть', action: openFn },
+                'sep',
+                { label: 'Убрать из Dock', danger: true, action: removeFn },
+            ]);
+        });
+        dock.appendChild(b);
+    });
+}
+function removeDockPinned() {
+    const dock = document.getElementById('dock-pinned');
+    if (dock) dock.remove();
+}
+
+// Обновить иконку корзины в доке по наполнению (вызывается при изменениях корзины)
+function refreshDockTrash() {
+    if (settings.theme !== 'macos') return;
+    const img = document.querySelector('#dock-pinned .dock-item[data-app="recycle"] img');
+    if (img) img.src = macDockIconSrc('recycle');
+}
+
+// Подменю «Добавить в Dock»: галочка = уже в доке, клик переключает (как Keep in Dock)
+function dockAddSubmenu() {
+    const current = getDockItems();
+    return Object.keys(DOCK_APPS).map(function(id) {
+        const app = DOCK_APPS[id];
+        return {
+            label: app.name,
+            icon: '<img class="xp-icon-img" src="' + macDockIconSrc(id) + '" width="16" height="16" alt="">',
+            check: current.indexOf(id) !== -1,
+            action: function() {
+                let items = getDockItems();
+                if (items.indexOf(id) === -1) items.push(id);
+                else items = items.filter(function(x){ return x !== id; });
+                saveDockItems(items);
+                renderDockPinned();
+            }
+        };
+    });
+}
+
 // ==================== BACKGROUND ====================
-var DEFAULT_BG = 'wprs/WiXP.jpg';
+var DEFAULT_BG_XP    = 'wprs/WiXP.jpg';
+var DEFAULT_BG_MACOS = 'wprs/AquaBlue.jpg';
 
 function applyBackground() {
-    const bg = localStorage.getItem(STORAGE.bg) || DEFAULT_BG;
+    // Пользовательский фон имеет приоритет в любой теме; иначе — дефолт темы
+    const custom = localStorage.getItem(STORAGE.bg);
+    const bg = custom || (settings.theme === 'macos' ? DEFAULT_BG_MACOS : DEFAULT_BG_XP);
     const d = document.getElementById('desktop');
     d.style.backgroundImage = 'url(\'' + bg + '\')';
     d.style.backgroundSize = 'cover';
@@ -992,6 +1373,7 @@ function applyBackground() {
 var glassDragIndex = null; // index of tile being dragged in glass grid
 
 function renderDesktop() {
+    refreshDockTrash(); // иконка корзины в доке (тема macos)
     // Glass grid mode — completely different rendering path
     if (settings.viewMode === 'glass') {
         renderGlassGrid();
@@ -1033,7 +1415,12 @@ function renderDesktop() {
     });
 
     var _addBtnEl = createAddButton(); if (_addBtnEl) container.appendChild(_addBtnEl);
-    SYSTEM_ICONS_DEF.forEach(function(def, i) { container.appendChild(createSystemIcon(def, i)); });
+    let sysSlot = 0;
+    SYSTEM_ICONS_DEF.forEach(function(def) {
+        // В теме macos корзина живёт в Dock, на столе её нет (как в настоящем Mac OS X)
+        if (settings.theme === 'macos' && def.id === 'recycle') return;
+        container.appendChild(createSystemIcon(def, sysSlot++));
+    });
 
     // Hide glass search bar
     var gsb = document.getElementById('glass-search-bar');
@@ -1436,12 +1823,12 @@ function createLinkIconWindow(item, index) {
         if (e.target.closest('.tile-btns') || e.target.closest('.tile-resize-handle')) return;
         if (e.ctrlKey) { selectIcon(index, true); return; }
         selectIcon(index, false);
-        if (!settings.doubleClickOpen) navToUrl(item.url);
+        if (!settings.doubleClickOpen) openLinkItem(item);
     }
     tb.addEventListener('click', navigate);
     tc.addEventListener('click', navigate);
-    tb.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) navToUrl(item.url); });
-    tc.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) navToUrl(item.url); });
+    tb.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) openLinkItem(item); });
+    tc.addEventListener('dblclick', function(e){ if (settings.doubleClickOpen && !e.target.closest('.tile-btns') && !e.target.closest('.tile-resize-handle')) openLinkItem(item); });
 
     // Close → trash
     tb.querySelector('.tile-btn-close').addEventListener('click', function(e) {
@@ -1479,10 +1866,10 @@ function createLinkIconXP(item, index) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
         if (e.ctrlKey) { selectIcon(index, true); return; }
         selectIcon(index, false);
-        if (!settings.doubleClickOpen) navToUrl(item.url);
+        if (!settings.doubleClickOpen) openLinkItem(item);
     });
     icon.addEventListener('dblclick', function(e) {
-        if (settings.doubleClickOpen) navToUrl(item.url);
+        if (settings.doubleClickOpen) openLinkItem(item);
     });
     return icon;
 }
@@ -1547,6 +1934,8 @@ function saveSysIconPos(id, x, y, dw, dh) {
 
 function getSysIconSVG(id) {
     if (id === 'mycomputer') {
+        // В теме macos — Macintosh HD
+        if (settings.theme === 'macos') return '<img class="xp-icon-img" src="icons/mac/harddisk.png" width="48" height="48" alt="">';
         return xpIcon('my-computer', 48);
     }
     if (id === 'recycle') {
@@ -1566,9 +1955,11 @@ function createSystemIcon(def, slotIndex) {
     icon.dataset.sysId = def.id;
     icon.style.cssText = 'position:absolute; left:' + dispPos.x + 'px; top:' + dispPos.y + 'px;';
 
+    // В теме macos «Мой компьютер» подписан как Macintosh HD
+    const label = (settings.theme === 'macos' && def.id === 'mycomputer') ? 'Macintosh HD' : def.name;
     icon.innerHTML =
         '<div class="xp-icon-img-wrapper">' + getSysIconSVG(def.id) + '</div>' +
-        '<span class="xp-icon-label">' + escapeHtml(def.name) + '</span>';
+        '<span class="xp-icon-label">' + escapeHtml(label) + '</span>';
 
     icon.addEventListener('click', function(e) {
         if (icon._wasDragged) { icon._wasDragged = false; return; }
@@ -2008,7 +2399,10 @@ function wmMaximize(id) {
         w.maximized=false; w.el.querySelector('.xp-btn-max').innerHTML='&#9633;';
     } else {
         w.savedRect={left:w.el.style.left,top:w.el.style.top,width:w.el.style.width,height:w.el.style.height};
-        w.el.style.cssText += ';left:0;top:0;width:100vw;height:calc(100vh - 40px)';
+        // В теме macos разворачиваем под строку меню (26px), а не под таскбар
+        w.el.style.cssText += (settings.theme === 'macos')
+            ? ';left:0;top:26px;width:100vw;height:calc(100vh - 26px)'
+            : ';left:0;top:0;width:100vw;height:calc(100vh - 40px)';
         w.maximized=true; w.el.querySelector('.xp-btn-max').innerHTML='&#10064;';
     }
 }
@@ -2033,6 +2427,12 @@ function wmClose(id) {
 function wmAddToTaskbar(id, title, icon) {
     const bar = document.getElementById('taskbar-windows'), btn = document.createElement('button');
     btn.className = 'taskbar-win-btn';
+    // В теме macos иконки дока крупные: для известных приложений — mac-набор
+    // (Cheetah), для остальных — чёткий источник 64px вместо 16px
+    if (settings.theme === 'macos') {
+        if (DOCK_APPS[id]) icon = '<img class="xp-icon-img" src="' + macDockIconSrc(id) + '" width="16" height="16" alt="">';
+        else icon = icon.replace(/icons\/16\//g, 'icons/64/');
+    }
     btn.innerHTML = '<span class="taskbar-btn-icon">' + icon + '</span><span class="taskbar-btn-title">' + escapeHtml(title) + '</span>';
     btn.addEventListener('click', function() { if (!wmWindows[id]) return; if (wmWindows[id].minimized) { wmRestore(id); wmFocus(id); } else if (activeWindowId===id) wmMinimize(id); else wmFocus(id); });
     bar.appendChild(btn); wmWindows[id].taskbarBtn = btn;
@@ -2178,10 +2578,15 @@ function showLinkIconContextMenu(x, y, idx) {
     if (!selectedIndices.has(idx)) { selectedIndices.clear(); selectedIndices.add(idx); updateSelectionUI(); }
     if (selectedIndices.size > 1) { showMultiSelectContextMenu(x, y); return; }
     showContextMenu(x, y, [
-        { label: 'Открыть',                 icon: xpIcon('play',16),       action: function() { navToUrl(item.url); } },
+        { label: item.app ? 'Открыть в окне' : 'Открыть', icon: xpIcon('play',16), action: function() { openLinkItem(item); } },
         { label: 'Открыть в новой вкладке', icon: xpIcon('go',16), action: function() { window.open(item.url,'_blank'); } },
         { label: 'Открыть в новом окне',    icon: xpIcon('open',16), action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url}); else window.open(item.url,'_blank'); } },
-        { label: 'Инкогнито',               icon: '\uD83D\uDD75\uFE0F', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url,incognito:true}); else window.open(item.url,'_blank'); } },
+        { label: 'Инкогнито',               icon: '🕵️', action: function() { if (typeof chrome!=='undefined'&&chrome.windows) chrome.windows.create({url:item.url,incognito:true}); else window.open(item.url,'_blank'); } },
+        // Прикрепить к доку — только в теме macos, где док существует
+        ...(settings.theme === 'macos' && !dockHasUrl(item.url)
+            ? [{ label: 'Добавить в Dock', icon: '➕', action: function() { addUrlToDock(item.url, item.name); } }]
+            : []),
+        { label: 'Веб-приложение (в окне)', icon: '\uD83D\uDDBD\uFE0F', check: !!item.app, action: function() { item.app = !item.app; saveLinks(); } },
         'sep',
         { label: 'Изменить', icon: xpIcon('rename',16), action: function() { openEditDialog(idx, null); } },
         { label: 'Обновить миниатюру', icon: '📸', action: function() { requestScreenshot(item.url, item); } },
@@ -2245,7 +2650,7 @@ function showFolderItemContextMenu(x, y, folderIdx, childIdx) {
         { label: 'На рабочий стол', icon: '\uD83D\uDCCB', action: function() { const m=links[folderIdx].items.splice(childIdx,1)[0]; links.push(m); refreshFolderWindow(folderIdx); } },
         'sep',
         { label: 'Изменить', icon: '\u270F\uFE0F', action: function() { openEditDialog(folderIdx, childIdx); } },
-        { label: 'Удалить',  icon: '\uD83D\uDDD1\uFE0F', danger: true, action: function() { const d=links[folderIdx].items.splice(childIdx,1)[0]; if(d){d.deletedAt=Date.now();trashedLinks.push(d);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));} refreshFolderWindow(folderIdx); } },
+        { label: 'Удалить',  icon: '\uD83D\uDDD1\uFE0F', danger: true, action: function() { const d=links[folderIdx].items.splice(childIdx,1)[0]; if(d){d.deletedAt=Date.now();trashedLinks.push(d);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));refreshDockTrash();} refreshFolderWindow(folderIdx); } },
     ]);
 }
 
@@ -2269,6 +2674,16 @@ function showTaskbarBtnContextMenu(x, y, btn) {
 }
 
 function showTaskbarContextMenu(x, y) {
+    // В теме macos пустое место дока — меню редактирования Dock
+    if (settings.theme === 'macos') {
+        showContextMenu(x, y, [
+            { label: 'Добавить в Dock', icon: '\u2795', submenu: dockAddSubmenu() },
+            'sep',
+            { label: 'Свернуть все окна',   icon: '\u25BC', action: minimizeAll },
+            { label: 'Восстановить окна',   icon: '\u25B2', action: restoreAll },
+        ]);
+        return;
+    }
     showContextMenu(x, y, [
         { label: 'Свернуть все окна',   icon: '\u25BC', action: minimizeAll },
         { label: 'Восстановить окна',   icon: '\u25B2', action: restoreAll },
@@ -2451,7 +2866,7 @@ function showTileDialog(isFolder, item) {
     ni.placeholder = isFolder ? 'Название' : 'Оставьте пустым — возьмём с сайта';
     ng.appendChild(ni); c.appendChild(ng);
 
-    let ui=null, ii=null, acEl=null;
+    let ui=null, ii=null, acEl=null, appc=null;
     // Единственное определение acHide — работает даже если acEl=null
     let acItems=[], acFocused=-1;
     function acHide() { if(acEl){acEl.style.display='none';} acItems=[]; acFocused=-1; }
@@ -2519,13 +2934,20 @@ function showTileDialog(isFolder, item) {
         const ig=document.createElement('div'); ig.className='form-group'; ig.innerHTML='<label>Иконка (URL, необязательно):</label>';
         ii=document.createElement('input'); ii.type='text'; ii.value=(item&&item.customIcon)?item.customIcon:''; ii.placeholder='URL иконки';
         ig.appendChild(ii); c.appendChild(ig);
+
+        // Веб-приложение: открывать в XP-окне, а не в новой вкладке
+        const ag=document.createElement('div'); ag.className='form-group';
+        const aLbl=document.createElement('label'); aLbl.style.cursor='pointer';
+        appc=document.createElement('input'); appc.type='checkbox'; appc.checked=!!(item&&item.app);
+        aLbl.appendChild(appc); aLbl.append(' Открывать в окне (веб-приложение)');
+        ag.appendChild(aLbl); c.appendChild(ag);
     }
 
     const bd=document.createElement('div'); bd.className='dialog-btns';
     const sv=document.createElement('button'); sv.className='xp-dialog-btn xp-dialog-btn-primary'; sv.textContent='OK';
     const cn=document.createElement('button'); cn.className='xp-dialog-btn'; cn.textContent='Отмена';
     bd.appendChild(sv); bd.appendChild(cn); c.appendChild(bd);
-    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:250, isFolder?xpIcon('folder',16):xpIcon('internet-shortcut',16));
+    wmCreate(winId, isEdit?'Изменить':(isFolder?'Создать папку':'Создать ярлык'), c, 320, isFolder?150:275, isFolder?xpIcon('folder',16):xpIcon('internet-shortcut',16));
     if (wmWindows[winId]) wmWindows[winId].onClose = function(){ if (acEl && acEl.parentNode) acEl.remove(); acEl = null; };
     setTimeout(function(){ni.focus();},50);
 
@@ -2541,7 +2963,7 @@ function showTileDialog(isFolder, item) {
             let url=ui?ui.value.trim():''; if(!url)return;
             if(!/^[a-z][a-z0-9+\-.]*:\/\//i.test(url))url='https://'+url;
             const ci_=ii?ii.value.trim():'';
-            const newItem={name:resolvedName,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_;
+            const newItem={name:resolvedName,url:url,x:undefined,y:undefined}; if(ci_)newItem.customIcon=ci_; if(appc&&appc.checked)newItem.app=true;
             if(isEdit){if(editCtx.childIndex!==null){links[editCtx.tileIndex].items[editCtx.childIndex]=newItem;refreshFolderWindow(editCtx.tileIndex);}else links[editCtx.tileIndex]=newItem;if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_rename_shortcut,'wave',3000);},200);}}
             else if(editCtx.folderIndex!==null){links[editCtx.folderIndex].items.push(newItem);refreshFolderWindow(editCtx.folderIndex);}
             else links.push(newItem);
@@ -2797,7 +3219,7 @@ function makeProgItem(item, inFolder) {
     el.className = 'sm-prog-item' + (inFolder ? ' sm-prog-item-indent' : '');
     var fav = item.customIcon || getFaviconUrl(item.url);
     el.innerHTML = '<img class="sm-prog-favicon" src="' + escapeHtml(fav) + '" alt=""><span>' + escapeHtml(item.name) + '</span>';
-    el.addEventListener('click', function() { closeStartMenu(); navToUrl(item.url); });
+    el.addEventListener('click', function() { closeStartMenu(); openLinkItem(item); });
     return el;
 }
 
@@ -3174,7 +3596,7 @@ function openLinksExplorer() {
                 selectedIdx = i;
             });
             row.addEventListener('dblclick', function() {
-                chrome.tabs.create({ url: item.url });
+                openLinkItem(item);
             });
             rows.appendChild(row);
         });
@@ -3194,22 +3616,42 @@ function openLinksExplorer() {
 // ==================== MY COMPUTER ====================
 function openMyComputer() {
     if (wmWindows['mycomputer']) { wmRestore('mycomputer'); wmFocus('mycomputer'); return; }
+    const mac = settings.theme === 'macos';
     const wrap = document.createElement('div'); wrap.className = 'mycomputer-wrap';
 
     const sidebar = document.createElement('div'); sidebar.className = 'mycomputer-sidebar';
     sidebar.innerHTML = '<h4>Системные задачи</h4>';
-    [[xpIcon('notepad',16)+' Блокнот', function(){openNotepad();}],[xpIcon('search',16)+' Поиск', function(){openSearch();}],[xpIcon('recycle-bin',16)+' Корзина', function(){openRecycleBin();}],[xpIcon('my-computer',16)+' Сведения', function(){openSystemInfo();}]].forEach(function(item){
+    const sbItems = mac ? [
+        [macIcon16('notepad')+' Блокнот', function(){openNotepad();}],
+        [macIcon16('search')+' Поиск', function(){openSearch();}],
+        [macIcon16('recycle')+' Корзина', function(){openRecycleBin();}],
+        [macIcon16('settings')+' Сведения', function(){openSystemInfo();}]
+    ] : [
+        [xpIcon('notepad',16)+' Блокнот', function(){openNotepad();}],
+        [xpIcon('search',16)+' Поиск', function(){openSearch();}],
+        [xpIcon('recycle-bin',16)+' Корзина', function(){openRecycleBin();}],
+        [xpIcon('my-computer',16)+' Сведения', function(){openSystemInfo();}]
+    ];
+    sbItems.forEach(function(item){
         const d=document.createElement('div'); d.className='mycomputer-sidebar-item';
         d.innerHTML=item[0]; d.addEventListener('click',item[1]); sidebar.appendChild(d);
     });
 
     const main = document.createElement('div'); main.className = 'mycomputer-main';
     const addr = document.createElement('div'); addr.className = 'mycomputer-address';
-    addr.innerHTML = '<span>'+xpIcon('my-computer',16)+'</span><span>Мой компьютер</span>';
+    addr.innerHTML = mac
+        ? '<span>'+macIcon16('harddisk')+'</span><span>Macintosh HD</span>'
+        : '<span>'+xpIcon('my-computer',16)+'</span><span>Мой компьютер</span>';
     main.appendChild(addr);
 
     const drives = document.createElement('div'); drives.className = 'mycomputer-drives';
-    const driveItems = [
+    const driveItems = mac ? [
+        {icon:macIcon('harddisk',32),name:'Macintosh HD',info:links.length+' объектов',action:function(){openLinksExplorer();}},
+        {icon:macIcon('folder',32),name:'Закладки браузера',info:'Избранное',action:function(){openBrowserBookmarks();}},
+        {icon:macIcon('wordpad',32),name:'Документы',info:'WordPad',action:function(){openWordPad();}},
+        {icon:macIcon('recycle',32),name:'Корзина',info:trashedLinks.length+' элементов',action:function(){openRecycleBin();}},
+        {icon:macIcon('settings',32),name:'Сведения',info:'О системе',action:function(){openSystemInfo();}},
+    ] : [
         {icon:xpIcon('folder',32),name:'Мои ярлыки (C:)',info:links.length+' объектов',action:function(){openLinksExplorer();}},
         {icon:xpIcon('favorites',32),name:'Избранное (D:)',info:'Закладки браузера',action:function(){openBrowserBookmarks();}},
         {icon:xpIcon('wordpad',32),name:'Документы',info:'WordPad',action:function(){openWordPad();}},
@@ -3223,7 +3665,7 @@ function openMyComputer() {
     });
     main.appendChild(drives);
     wrap.appendChild(sidebar); wrap.appendChild(main);
-    wmCreate('mycomputer','Мой компьютер',wrap,540,360, xpIcon('my-computer',16));
+    wmCreate('mycomputer', mac ? 'Macintosh HD' : 'Мой компьютер', wrap, 540, 360, mac ? macIcon16('harddisk') : xpIcon('my-computer',16));
 }
 
 // ==================== BROWSER BOOKMARKS ====================
@@ -3247,7 +3689,7 @@ function openBrowserBookmarks() {
     // Sidebar — folder tree
     var sidebar = document.createElement('div'); sidebar.className = 'xp-explorer-sidebar';
     var sbTitle = document.createElement('div'); sbTitle.className = 'xp-explorer-sb-title';
-    sbTitle.innerHTML = xpIcon('folder',16)+' Папки';
+    sbTitle.innerHTML = (settings.theme === 'macos' ? macIcon16('folder') : xpIcon('folder',16)) + ' Папки';
     sidebar.appendChild(sbTitle);
     var treeEl = document.createElement('div'); treeEl.id = 'bkmarks-tree';
     sidebar.appendChild(treeEl);
@@ -3294,10 +3736,13 @@ function _makeBkmarksFolderRow(node, depth, treeEl, rowsEl, statusEl) {
     row.className = 'bkmarks-tree-item';
     row.style.paddingLeft = (8 + depth * 14) + 'px';
     row.innerHTML =
-        '<svg width="16" height="14" viewBox="0 0 48 40" style="flex-shrink:0;margin-right:5px">' +
-        '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
-        '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
-        '</svg><span>' + escapeHtml(node.title || '(без имени)') + '</span>';
+        (settings.theme === 'macos'
+            ? '<img src="icons/mac/folder.png" width="16" height="14" style="flex-shrink:0;margin-right:5px;object-fit:contain" alt="">'
+            : '<svg width="16" height="14" viewBox="0 0 48 40" style="flex-shrink:0;margin-right:5px">' +
+              '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
+              '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
+              '</svg>') +
+        '<span>' + escapeHtml(node.title || '(без имени)') + '</span>';
 
     row.addEventListener('click', function(e){
         e.stopPropagation();
@@ -3330,10 +3775,12 @@ function _showBkmarksFolder(node, rowsEl, statusEl, treeEl) {
         var row = document.createElement('div');
         row.className = 'xp-explorer-row' + (idx++ % 2 === 1 ? ' even' : '');
         row.innerHTML =
-            '<svg width="16" height="14" viewBox="0 0 48 40" class="xp-explorer-row-ico" style="flex-shrink:0">' +
-            '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
-            '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
-            '</svg>' +
+            (settings.theme === 'macos'
+                ? '<img src="icons/mac/folder.png" width="16" height="14" class="xp-explorer-row-ico" style="flex-shrink:0;object-fit:contain" alt="">'
+                : '<svg width="16" height="14" viewBox="0 0 48 40" class="xp-explorer-row-ico" style="flex-shrink:0">' +
+                  '<path d="M2 8 L2 37 L46 37 L46 13 L22 13 L18 8 Z" fill="#f0c040" stroke="#c89828" stroke-width="1.5"/>' +
+                  '<path d="M2 16 L46 16 L46 37 L2 37 Z" fill="#f8d860" stroke="#c89828" stroke-width="0.5"/>' +
+                  '</svg>') +
             '<span class="xp-explorer-row-name">' + escapeHtml(folder.title || '(без имени)') + '</span>' +
             '<span class="xp-explorer-row-url" style="color:#888">Папка</span>';
         row.addEventListener('dblclick', function(){
@@ -3503,6 +3950,21 @@ function openSettings() {
 
     // --- Tab: Тема ---
     const tP = tabPanels['theme'];
+    // Тема рабочего стола (XP / Mac OS X Aqua)
+    const thG = document.createElement('div'); thG.className = 'form-group'; thG.innerHTML = '<label>Тема: </label>';
+    const thS = document.createElement('select'); thS.style.cssText = 'margin-left:4px;font-size:11px;';
+    [['xp','Windows XP'],['macos','Mac OS X Aqua']].forEach(function(opt) {
+        const o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
+        if (settings.theme === opt[0]) o.selected = true;
+        thS.appendChild(o);
+    });
+    thG.appendChild(thS); tP.appendChild(thG);
+    thS.addEventListener('change', function() {
+        setTheme(thS.value);
+        if (typeof clippySay === 'function') {
+            setTimeout(function(){ clippySay(CLIPPY_MSGS.react_settings_change, 'wave', 4000); }, 500);
+        }
+    });
     const vg = document.createElement('div'); vg.className = 'form-group'; vg.innerHTML = '<label>Режим вида: </label>';
     const vs = document.createElement('select'); vs.style.cssText = 'margin-left:4px;font-size:11px;';
     [['glass','Плитки (стекло)'],['window','Окна с превью'],['icon','Ярлыки XP']].forEach(function(opt) {
@@ -3677,7 +4139,7 @@ function openRecycleBin() {
             const rb=document.createElement('button'); rb.className='xp-dialog-btn'; rb.textContent='Восстановить';
             rb.addEventListener('click',function(){const r=trashedLinks.splice(i,1)[0];delete r.deletedAt;links.push(r);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));saveAndRender();rend();if(typeof clippySay==='function'){setTimeout(function(){clippySay(CLIPPY_MSGS.react_restore_from_trash,'wave',3000);},200);}});
             const db=document.createElement('button'); db.className='xp-dialog-btn'; db.textContent='Удалить';
-            db.addEventListener('click',function(){trashedLinks.splice(i,1);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));rend();});
+            db.addEventListener('click',function(){trashedLinks.splice(i,1);localStorage.setItem(STORAGE.trash,JSON.stringify(trashedLinks));refreshDockTrash();rend();});
             row.appendChild(rb); row.appendChild(db); c.appendChild(row);
         });
         const cb=document.createElement('button'); cb.className='xp-dialog-btn'; cb.style.cssText='margin:8px;display:block'; cb.textContent='Очистить корзину';
@@ -3690,18 +4152,32 @@ function openRecycleBin() {
 // ==================== SYSTEM INFO ====================
 function openSystemInfo() {
     if (wmWindows['sysinfo']) { wmRestore('sysinfo'); wmFocus('sysinfo'); return; }
+    const mac = settings.theme === 'macos';
     const up=Math.floor((Date.now()-pageLoadTime)/1000);
     const manifest = chrome.runtime.getManifest();
     const c=document.createElement('div'); c.className='sysinfo-window';
+    // Логотип темы: в macos — яблоко из набора Cheetah, в XP — «Мой компьютер»
+    const headIcon = mac
+        ? '<img src="icons/mac/apple.png" width="44" height="44" alt="">'
+        : '<img src="icons/48/my-computer.png" width="48" height="48" alt="">';
+    const sysLine = mac
+        ? '<b>Система:</b> Mac OS X, версия 10.0 «Cheetah»'
+        : '<b>Система:</b> Microsoft Windows XP Professional, Version 2002';
+    // В пакете оба набора иконок — кредиты показываем независимо от темы
+    const iconsCredit =
+        '<div class="sysinfo-row">Иконки: <a href="https://github.com/marchmountain/-Windows-XP-High-Resolution-Icon-Pack" target="_blank" style="color:#0033cc;">Windows XP High Resolution Icon Pack</a> by marchmountain (CC0 1.0) и <a href="https://github.com/B00merang-Project/Mac-OS-X-Cheetah" target="_blank" style="color:#0033cc;">Mac-X-Cheetah</a> by Elbullazul (GPL-3.0, текст — icons/mac/LICENSE.md).</div>'+
+        (mac
+            ? '<div class="sysinfo-row">Mac OS X — торговая марка Apple Inc.</div>'
+            : '<div class="sysinfo-row">Windows XP — торговая марка Microsoft Corporation.</div>');
     c.innerHTML='<div class="sysinfo-head">'+
-        '<img src="icons/48/my-computer.png" width="48" height="48" alt="">'+
+        headIcon+
         '<div>'+
         '<div class="sysinfo-title">'+escapeHtml(manifest.name)+'</div>'+
         '<div class="sysinfo-edition">Версия '+escapeHtml(manifest.version)+'</div>'+
         '<div class="sysinfo-edition">© 2026 VibeCodeCrew</div>'+
         '</div></div>'+
         '<hr class="sysinfo-hr">'+
-        '<div class="sysinfo-row"><b>Система:</b> Microsoft Windows XP Professional, Version 2002</div>'+
+        '<div class="sysinfo-row">'+sysLine+'</div>'+
         '<div class="sysinfo-row"><b>Браузер:</b> '+escapeHtml(navigator.userAgent.substring(0,120))+'</div>'+
         '<div class="sysinfo-row"><b>Разрешение:</b> '+screen.width+'\xD7'+screen.height+'</div>'+
         '<div class="sysinfo-row"><b>Окно:</b> '+window.innerWidth+'\xD7'+window.innerHeight+'</div>'+
@@ -3710,10 +4186,9 @@ function openSystemInfo() {
         '<hr class="sysinfo-hr">'+
         '<div class="sysinfo-section-title">Лицензия и авторство</div>'+
         '<div class="sysinfo-row">Код аддона распространяется под лицензией MIT.</div>'+
-        '<div class="sysinfo-row">Иконки: <a href="https://github.com/marchmountain/-Windows-XP-High-Resolution-Icon-Pack" target="_blank" style="color:#0033cc;">Windows XP High Resolution Icon Pack</a> by marchmountain (CC0 1.0).</div>'+
-        '<div class="sysinfo-row">Windows XP — торговая марка Microsoft Corporation.</div>'+
+        iconsCredit+
         '<div class="sysinfo-row" style="margin-top:4px;"><a href="https://github.com/VibeCodeCrew/windows_xp_homepage" target="_blank" style="color:#0033cc;">github.com/VibeCodeCrew/windows_xp_homepage</a></div>';
-    wmCreate('sysinfo','Свойства системы',c,480,290, xpIcon('my-computer',16));
+    wmCreate('sysinfo', mac ? 'Об этом Mac' : 'Свойства системы', c, 480, 290, mac ? macIcon16('harddisk') : xpIcon('my-computer',16));
     setTimeout(function(){
         const win = wmWindows['sysinfo'] && wmWindows['sysinfo'].el;
         if (!win) return;
@@ -4831,6 +5306,66 @@ function openDoom() {
     wmResizeToContent('doom', 640, 400, 480, 300, 1600, 1200);
 }
 
+// ==================== WEB APPS ====================
+// Ярлык с флагом app открывается как приложение — в XP-окне с iframe.
+// Анти-фрейминговые заголовки сайтов (X-Frame-Options, CSP) снимаются
+// DNR-правилом только для нашей вкладки — см. initWebAppFrameRules.
+function openWebApp(item) {
+    let h = 0;
+    const u = item.url;
+    for (let i = 0; i < u.length; i++) h = ((h * 31) + u.charCodeAt(i)) >>> 0;
+    const winId = 'webapp-' + h.toString(36);
+    if (wmWindows[winId]) { wmRestore(winId); wmFocus(winId); return; }
+    const c = document.createElement('div');
+    c.className = 'webapp-window';
+    const ifr = document.createElement('iframe');
+    ifr.className = 'webapp-frame';
+    ifr.src = u;
+    c.appendChild(ifr);
+    const fav = getFaviconUrl(u);
+    const iconHtml = fav
+        ? '<img class="xp-icon-img" src="' + fav + '" width="16" height="16" alt="">'
+        : xpIcon('internet-shortcut', 16);
+    wmCreate(winId, item.name || u, c,
+        Math.min(1024, window.innerWidth - 60), Math.min(700, window.innerHeight - 80),
+        iconHtml);
+}
+
+// Запуск ярлыка: веб-приложение — в окне, обычная ссылка — переход вкладки
+function openLinkItem(item) {
+    if (item && item.app && !item.isFolder) { openWebApp(item); return; }
+    navToUrl(item.url);
+}
+
+// Снятие X-Frame-Options / CSP у ответов под-фреймов ТОЛЬКО нашей вкладки
+// (session-правила: живут до перезапуска браузера, другие вкладки не затронуты)
+function initWebAppFrameRules() {
+    if (typeof chrome === 'undefined' || !chrome.declarativeNetRequest || !chrome.tabs || !chrome.tabs.getCurrent) return;
+    chrome.tabs.getCurrent(function(tab) {
+        if (!tab || tab.id == null) return;
+        chrome.declarativeNetRequest.updateSessionRules({
+            removeRuleIds: [9001],
+            addRules: [{
+                id: 9001,
+                priority: 1,
+                action: {
+                    type: 'modifyHeaders',
+                    responseHeaders: [
+                        { header: 'x-frame-options', operation: 'remove' },
+                        { header: 'content-security-policy', operation: 'remove' },
+                        { header: 'content-security-policy-report-only', operation: 'remove' },
+                        { header: 'frame-options', operation: 'remove' }
+                    ]
+                },
+                condition: {
+                    tabIds: [tab.id],
+                    resourceTypes: ['sub_frame']
+                }
+            }]
+        });
+    });
+}
+
 // ==================== SOLITAIRE (KOSYNKA / KLONDIKE) ====================
 function openSolitaire() {
     if (wmWindows['solitaire']) { wmRestore('solitaire'); wmFocus('solitaire'); return; }
@@ -5717,6 +6252,8 @@ async function checkForUpdates(silent) {
         if (_verGt(remote.version, local)) {
             _updateAvail = { current: local, remote: remote.version };
             if (trayUpd) trayUpd.classList.remove('hidden');
+            const mbUpd = document.getElementById('mb-update'); // зеркало в меню-баре (тема macos)
+            if (mbUpd) mbUpd.classList.remove('hidden');
             setTimeout(function(){ if (typeof clippySay === 'function') clippySay(CLIPPY_MSGS.react_update, 'excited'); }, 1000);
             if (silent) {
                 showNotification('Windows Update', 'Доступна версия ' + remote.version + ' (сейчас ' + local + ')', xpIcon('update',16), 7000);
@@ -8133,7 +8670,8 @@ window.addEventListener('resize', function() {
 
 // ==================== INIT ====================
 function runStandardInit() {
-    applyBackground();
+    applyTheme();
+    initWebAppFrameRules(); // DNR: разрешить iframe для веб-приложений (только эта вкладка)
     const smUser = document.querySelector('.sm-username');
     if (smUser) smUser.textContent = username;
     var smAvatarImg = document.getElementById('sm-avatar-img');
@@ -8418,6 +8956,11 @@ function initSetupOOBE(onComplete) {
         if (currentStep < totalSteps) {
             currentStep++; updateSteps();
         } else {
+            const selectedTheme = document.querySelector('input[name="setup-theme"]:checked');
+            if (selectedTheme) {
+                settings.theme = selectedTheme.value;
+                localStorage.setItem(STORAGE.theme, settings.theme);
+            }
             const selectedView = document.querySelector('input[name="setup-view"]:checked');
             if (selectedView) {
                 settings.viewMode = selectedView.value;

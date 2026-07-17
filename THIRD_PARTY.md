@@ -10,6 +10,14 @@ This extension uses scaled PNG icons derived from the **Windows XP High Resoluti
 
 The Windows XP visual style and original icon designs are intellectual property of Microsoft Corporation. The icon pack above is a fan-made recreation/render released under CC0 by its author.
 
+## Mac OS X theme icons
+
+The `icons/mac/` set used by the macOS (Aqua) desktop theme is derived from the **Mac-X-Cheetah** icon theme by **Elbullazul**:
+
+- Source: https://github.com/B00merang-Project/Mac-OS-X-Cheetah (mirror: https://github.com/VibeCodeCrew/Mac-OS-X-Cheetah)
+- License: [GPL-3.0](https://github.com/B00merang-Project/Mac-OS-X-Cheetah/blob/master/LICENSE.md) — full license text ships as `icons/mac/LICENSE.md`
+- Icons are fan-made recreations in the style of Mac OS X 10.0, converted to PNG and scaled to 64px. The Mac OS X visual style and original designs are intellectual property of Apple Inc.
+
 ## DOOM (game engine & game data)
 
 The built-in **DOOM** app (folder `doom/`) runs the original Doom through a WebAssembly module:

@@ -13,11 +13,13 @@ Nostalgic Startpage заменяет каждую новую вкладку бр
 - Пользовательские иконки и автоматически загружаемые скриншоты страниц
 - Выделение группы иконок резиновой рамкой
 - Пользовательские или одноцветные обои
+- Две темы оформления: **Windows XP (Luna)** и **Mac OS X Aqua** — строка меню, Dock с увеличением иконок и гелевые окна 2001 года (переключается в настройках и в мастере первого запуска)
+- **Веб-приложения**: любой ярлык можно открывать в собственном окне (как DOOM), а не в новой вкладке — галочка «Открывать в окне» в свойствах ярлыка
 
 **Меню «Пуск»**
 - Классическое двухколоночное меню Windows XP
 - Панель «Все программы» со сворачиваемыми папками (закрыты по умолчанию):
-  - **Игры** — Сапёр, Косынка, Червы, Пинбол
+  - **Игры** — Сапёр, Косынка, Червы, Пинбол, DOOM
   - **Программы → Стандартные** — все встроенные инструменты; папки с рабочего стола отображаются здесь автоматически вместе с содержимым
 - Диалог завершения работы
 
@@ -113,11 +115,13 @@ Nostalgic Startpage turns every new browser tab into a nostalgic Windows XP desk
 - Custom icons and live-fetched page thumbnails (screenshots)
 - Rubber-band multi-select
 - Custom or solid-colour wallpaper
+- Two desktop themes: **Windows XP (Luna)** and **Mac OS X Aqua** — menu bar, magnifying Dock and gel windows from 2001 (switch in Settings or during first-run setup)
+- **Web apps**: any shortcut can open in its own window (like DOOM) instead of a new tab — "Open in window" checkbox in the shortcut's properties
 
 **Start Menu**
 - Classic two-column XP Start Menu
 - All Programs panel with collapsible folders (closed by default):
-  - **Games** — Minesweeper, Solitaire, Hearts, Pinball
+  - **Games** — Minesweeper, Solitaire, Hearts, Pinball, DOOM
   - **Programs → Accessories** — all built-in tools; desktop folders appear here automatically with their contents
 - Shutdown dialog
 
